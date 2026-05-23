@@ -1,0 +1,9 @@
+{
+    "[markdown]": {
+        "editor.colorDecorators": false
+    },
+    "[typescript]": {
+        "js/ts.format.semicolons": "remove",
+    },
+    "js/ts.experimental.useTsgo": false
+}

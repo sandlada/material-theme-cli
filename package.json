@@ -1,0 +1,64 @@
+{
+    "name": "@sandlada/material-theme-cli",
+    "version": "1.0.0-20260523.b",
+    "description": "Material Design CLI for generating theme tokens and serialized color outputs from a source color.",
+    "main": "dist/index.js",
+    "bin": {
+        "material-theme-cli": "./index.js"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "files": [
+        "dist/",
+        "index.js",
+        "src/",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "prestart": "npm run build",
+        "start": "node index.js",
+        "prepack": "npm run build",
+        "build": "rolldown -c --clean-dir",
+        "test": "vitest",
+        "test:run": "vitest run"
+    },
+    "author": "kai-orion",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/sandlada/material-theme-cli.git"
+    },
+    "bugs": {
+        "url": "https://github.com/sandlada/material-theme-cli/issues"
+    },
+    "homepage": "https://github.com/sandlada/material-theme-cli#readme",
+    "type": "module",
+    "keywords": [
+        "cli",
+        "css-generator",
+        "material-token-template",
+        "material-design",
+        "material-theme",
+        "material-color",
+        "material-palette",
+        "material-you"
+    ],
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "devDependencies": {
+        "@material/material-color-utilities": "^0.4.0",
+        "@types/js-yaml": "^4.0.9",
+        "@types/node": "^25.9.1",
+        "chalk": "^5.6.2",
+        "commander": "^14.0.3",
+        "csv-parse": "^6.2.1",
+        "fast-xml-parser": "^5.8.0",
+        "js-yaml": "^4.1.1",
+        "rolldown": "^1.0.2",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.7"
+    }
+}

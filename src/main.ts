@@ -8,6 +8,7 @@ import {
 	type Platform,
 } from "@material/material-color-utilities";
 import { Command } from "commander";
+import { randomInt } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,11 @@ export { SerializationService } from "./services/serialization.service";
 
 type CliOutputTarget = "console" | "file";
 type CliSpecVersion = "2021" | "2025";
+type CliColorInput = {
+	color: Hct;
+	expression: string;
+	usesRandomColor: boolean;
+};
 type CliPaletteOverrideKey =
 	| "primaryPalette"
 	| "secondaryPalette"
@@ -29,6 +35,13 @@ type CliPaletteOverrideKey =
 	| "neutralVariantPalette";
 
 type CliPaletteOverrides = Partial<Record<CliPaletteOverrideKey, TonalPalette>>;
+type CliPaletteExpressions = Partial<Record<CliPaletteOverrideKey, string>>;
+
+type ResolvedPaletteOverrides = {
+	palettes: CliPaletteOverrides;
+	paletteExpressions: CliPaletteExpressions;
+	usesRandomColor: boolean;
+};
 
 type ParsedCommandOptions = {
 	format: SerializationFormat;
@@ -42,13 +55,16 @@ type ParsedCommandOptions = {
 	contrastLevel: -1 | 0 | 1;
 	specVersion: CliSpecVersion;
 	platform: Platform;
-	primary?: Hct;
-	secondary?: Hct;
-	tertiary?: Hct;
-	error?: Hct;
-	neutral?: Hct;
-	neutralVariant?: Hct;
+	primary?: string;
+	secondary?: string;
+	tertiary?: string;
+	error?: string;
+	neutral?: string;
+	neutralVariant?: string;
 };
+
+const RandomColorLiteral = "random-color";
+const RandomColorRuntimeExpression = "createRandomColor()";
 
 const VariantAliases = new Map<string, Variant>([
 	["0", Variant.MONOCHROME],
@@ -125,6 +141,10 @@ export function parseColorInput(colorValue: string): Hct {
 		throw new Error("material-theme-cli: color value cannot be empty.");
 	}
 
+	if (isRandomColorLiteral(trimmedValue)) {
+		return createRandomColorHct();
+	}
+
 	const functionMatch = trimmedValue.match(/^([a-z]+)\((.*)\)$/iu);
 
 	if (functionMatch) {
@@ -162,7 +182,7 @@ export function parseColorInput(colorValue: string): Hct {
 	}
 
 	throw new Error(
-		`material-theme-cli: unsupported color value "${colorValue}". Expected hct(...), hex, argb(...), rgb(...), or lab(...).`,
+		`material-theme-cli: unsupported color value "${colorValue}". Expected random-color, hct(...), hex, argb(...), rgb(...), or lab(...).`,
 	);
 }
 
@@ -261,8 +281,8 @@ function createCommand() {
 
 	command
 		.name("material-theme-cli")
-		.description("Generate Material Design theme tokens from HCT, hex, ARGB, RGB, or LAB color values.")
-		.argument("[color]", "source color value")
+		.description("Generate Material Design theme tokens from HCT, hex, ARGB, RGB, LAB, or random-color values.")
+		.argument("[color]", "source color value or random-color")
 		.option("--input <file-path>", "read the source color value from a file")
 		.option("--format <format>", "serialization format", parseFormatOption, "css")
 		.option("--output <target>", "output target", parseOutputTargetOption, "console")
@@ -274,12 +294,12 @@ function createCommand() {
 		.option("--contrast-level <contrast-level>", "contrast level", parseContrastLevelOption, 0)
 		.option("--spec-version <spec-version>", "design spec version", parseSpecVersionOption, "2025")
 		.option("--platform <platform>", "target platform", parsePlatformOption, "phone")
-		.option("--primary <color>", "override the primary palette", parseColorInput)
-		.option("--secondary <color>", "override the secondary palette", parseColorInput)
-		.option("--tertiary <color>", "override the tertiary palette", parseColorInput)
-		.option("--error <color>", "override the error palette", parseColorInput)
-		.option("--neutral <color>", "override the neutral palette", parseColorInput)
-		.option("--neutral-variant <color>", "override the neutral-variant palette", parseColorInput)
+		.option("--primary <color>", "override the primary palette")
+		.option("--secondary <color>", "override the secondary palette")
+		.option("--tertiary <color>", "override the tertiary palette")
+		.option("--error <color>", "override the error palette")
+		.option("--neutral <color>", "override the neutral palette")
+		.option("--neutral-variant <color>", "override the neutral-variant palette")
 		.action(async (colorValue: string | undefined, options: ParsedCommandOptions) => {
 			await executeCommand(command, colorValue, options);
 		});
@@ -294,8 +314,7 @@ async function executeCommand(command: Command, colorValue: string | undefined, 
 		return;
 	}
 
-	const sourceColor = parseColorInput(sourceColorValue);
-	const sourceColorExpression = renderColorExpression(sourceColorValue);
+	const sourceColorInput = resolveColorInput(sourceColorValue);
 	const palettes = buildPaletteOverrides(options);
 	const whiteList = normalizeColorNameList(options.token);
 	const blackList = normalizeColorNameList(options.exclude);
@@ -303,17 +322,18 @@ async function executeCommand(command: Command, colorValue: string | undefined, 
 	if (options.makeJs) {
 		const generatedScript = MakeJsService.create({
 			outputPath: options.makeJs,
-			sourceColorExpression,
+			sourceColorExpression: sourceColorInput.expression,
 			variant: options.variant,
 			contrastLevel: options.contrastLevel,
 			specVersion: options.specVersion,
 			platform: options.platform,
-			palettes,
+			palettes: palettes.paletteExpressions,
 			whiteList,
 			blackList,
 			format: options.format,
 			output: options.output,
 			path: options.path,
+			usesRandomColor: sourceColorInput.usesRandomColor || palettes.usesRandomColor,
 		});
 
 		await writeFile(options.makeJs, generatedScript, "utf8");
@@ -321,12 +341,12 @@ async function executeCommand(command: Command, colorValue: string | undefined, 
 	}
 
 	const theme = MaterialColorService.create({
-		sourceColor,
+		sourceColor: sourceColorInput.color,
 		variant: options.variant,
 		contrast: options.contrastLevel,
 		specVersion: options.specVersion,
 		platform: options.platform,
-		palettes,
+		palettes: palettes.palettes,
 		...(whiteList.length > 0 ? { whiteList: whiteList as MaterialColorKebabCaseName[] } : {}),
 		...(blackList.length > 0 ? { blackList: blackList as MaterialColorKebabCaseName[] } : {}),
 	});
@@ -361,8 +381,10 @@ async function resolveSourceColorValue(colorValue: string | undefined, inputPath
 	return undefined;
 }
 
-function buildPaletteOverrides(options: ParsedCommandOptions): CliPaletteOverrides {
-	const overrides: CliPaletteOverrides = {};
+function buildPaletteOverrides(options: ParsedCommandOptions): ResolvedPaletteOverrides {
+	const palettes: CliPaletteOverrides = {};
+	const paletteExpressions: CliPaletteExpressions = {};
+	let usesRandomColor = false;
 
 	for (const [optionName, paletteName] of PaletteOptionMap) {
 		const colorValue = options[optionName];
@@ -371,10 +393,13 @@ function buildPaletteOverrides(options: ParsedCommandOptions): CliPaletteOverrid
 			continue;
 		}
 
-		overrides[paletteName] = TonalPalette.fromHct(colorValue);
+		const resolvedColor = resolveColorInput(colorValue);
+		palettes[paletteName] = TonalPalette.fromHct(resolvedColor.color);
+		paletteExpressions[paletteName] = resolvedColor.expression;
+		usesRandomColor ||= resolvedColor.usesRandomColor;
 	}
 
-	return overrides;
+	return { palettes, paletteExpressions, usesRandomColor };
 }
 
 function resolveOutputPath(pathOption: string | undefined, makeJsPath: string | undefined, format: SerializationFormat) {
@@ -477,6 +502,10 @@ function renderColorExpression(colorValue: string) {
 		throw new Error("material-theme-cli: color value cannot be empty.");
 	}
 
+	if (isRandomColorLiteral(trimmedValue)) {
+		return RandomColorRuntimeExpression;
+	}
+
 	const functionMatch = trimmedValue.match(/^([a-z]+)\((.*)\)$/iu);
 
 	if (functionMatch) {
@@ -514,7 +543,7 @@ function renderColorExpression(colorValue: string) {
 	}
 
 	throw new Error(
-		`material-theme-cli: unsupported color value "${colorValue}". Expected hct(...), hex, argb(...), rgb(...), or lab(...).`,
+		`material-theme-cli: unsupported color value "${colorValue}". Expected random-color, hct(...), hex, argb(...), rgb(...), or lab(...).`,
 	);
 }
 
@@ -560,6 +589,22 @@ function renderArgbExpression(argumentsList: string[], originalValue: string) {
 
 function renderArgbLiteral(value: number) {
 	return `0x${(value >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function resolveColorInput(colorValue: string): CliColorInput {
+	return {
+		color: parseColorInput(colorValue),
+		expression: renderColorExpression(colorValue),
+		usesRandomColor: isRandomColorLiteral(colorValue),
+	};
+}
+
+function isRandomColorLiteral(value: string) {
+	return value.trim().toLowerCase() === RandomColorLiteral;
+}
+
+function createRandomColorHct() {
+	return Hct.fromInt(argbFromRgb(randomInt(256), randomInt(256), randomInt(256)));
 }
 
 function parseFiniteNumber(value: string, context: string) {

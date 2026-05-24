@@ -1,4 +1,4 @@
-import { Hct, TonalPalette, Variant, type Platform } from "@material/material-color-utilities";
+import { Variant, type Platform } from "@material/material-color-utilities";
 import { dirname, relative, resolve } from "node:path";
 import type { SerializationFormat } from "./serialization.service";
 
@@ -10,7 +10,7 @@ type MakeJsPaletteName =
     | "neutralPalette"
     | "neutralVariantPalette";
 
-type MakeJsPaletteOverrides = Partial<Record<MakeJsPaletteName, TonalPalette>>;
+type MakeJsPaletteExpressions = Partial<Record<MakeJsPaletteName, string>>;
 
 export type MakeJsGenerationOptions = {
     outputPath: string;
@@ -19,12 +19,13 @@ export type MakeJsGenerationOptions = {
     contrastLevel: -1 | 0 | 1;
     specVersion: "2021" | "2025";
     platform: Platform;
-    palettes: MakeJsPaletteOverrides;
+    palettes: MakeJsPaletteExpressions;
     whiteList: string[];
     blackList: string[];
     format: SerializationFormat;
     output: "console" | "file";
     path?: string;
+    usesRandomColor?: boolean;
 };
 
 export class MakeJsService {
@@ -35,6 +36,16 @@ export class MakeJsService {
         const paletteSource = this.renderPaletteOverrides(args.palettes);
         const runtimePath = args.output === "file" ? JSON.stringify(args.path ?? `./output.${args.format}`) : "undefined";
         const variantExpression = `Variant.${Variant[args.variant]}`;
+        const randomSupportLines = args.usesRandomColor
+            ? [
+                'import { randomInt } from "node:crypto";',
+                "",
+                "function createRandomColor() {",
+                "    return Hct.fromInt(argbFromRgb(randomInt(256), randomInt(256), randomInt(256)));",
+                "}",
+                "",
+            ]
+            : [];
         const configLines = [
             "const config = {",
             "    sourceColor,",
@@ -58,6 +69,7 @@ export class MakeJsService {
         const lines = [
             "#!/usr/bin/env node",
             "",
+            ...randomSupportLines,
             'import { Hct, TonalPalette, Variant, argbFromHex, argbFromLab, argbFromRgb } from "@material/material-color-utilities";',
             `import { MaterialColorService, SerializationService } from ${JSON.stringify(bundleImportPath)};`,
             'import { mkdir, writeFile } from "node:fs/promises";',
@@ -116,23 +128,15 @@ export class MakeJsService {
         return `./${relativePath}`;
     }
 
-    private static renderPaletteOverrides(palettes: MakeJsPaletteOverrides) {
-        const entries = Object.entries(palettes) as [MakeJsPaletteName, TonalPalette][];
+    private static renderPaletteOverrides(palettes: MakeJsPaletteExpressions) {
+        const entries = Object.entries(palettes) as [MakeJsPaletteName, string][];
 
         if (entries.length === 0) {
             return "{}";
         }
 
-        const lines = entries.map(([name, palette]) => `    ${name}: TonalPalette.fromHct(${this.renderHctLiteral(palette.keyColor)}),`);
+        const lines = entries.map(([name, expression]) => `    ${name}: TonalPalette.fromHct(${expression}),`);
 
         return "{\n" + lines.join("\n") + "\n}";
-    }
-
-    private static renderHctLiteral(color: Hct) {
-        return `Hct.fromInt(${this.renderArgbLiteral(color.toInt())})`;
-    }
-
-    private static renderArgbLiteral(argb: number) {
-        return `0x${(argb >>> 0).toString(16).padStart(8, "0")}`;
     }
 }

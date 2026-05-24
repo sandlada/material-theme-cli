@@ -25,6 +25,11 @@ describe("CLI parsing", () => {
         expect(parseColorInput("hct(270, 75, 50)").toInt()).toBe(Hct.from(270, 75, 50).toInt())
     })
 
+    it("generates a random HCT color when random-color is requested", () => {
+        expect(parseColorInput("random-color")).toBeInstanceOf(Hct)
+        expect(parseColorInput("RANDOM-COLOR")).toBeInstanceOf(Hct)
+    })
+
     it("normalizes the common CLI option aliases", () => {
         expect(parseFormatOption("CSS")).toBe("css")
         expect(parseVariantOption("tonalspot")).toBe(Variant.TONAL_SPOT)

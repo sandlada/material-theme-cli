@@ -3,42 +3,50 @@
 ![npm version](https://img.shields.io/npm/v/@sandlada/material-theme-cli?label=NPM%20Version&labelColor=%2300531f&color=%23a3f5aa)
 ![GitHub License](https://img.shields.io/github/license/sandlada/material-theme-cli?label=License&labelColor=%2300531f&color=%23a3f5aa)
 
-一个基于 Material Design 动态色彩系统的 CLI。输入一个源色，它会生成可直接用于前端工程、设计令牌、脚本集成和批量导出的主题数据。
+A CLI based on the Material Design dynamic color system. Given a source color, it generates theme data that can be used directly in front-end projects, design tokens, script integrations, and bulk exports.
 
-运行环境：Node.js 22+，并且项目使用 ESM。
+Runtime requirements: Node.js 22+ and ESM.
 
-## 安装
+For the Simplified Chinese version, see [README.zh-CN.md](docs/README.zh-CN.md).
 
-### 全局安装
+## Installation
+
+### Global install
 
 ```bash
 npm i -g @sandlada/material-theme-cli
 ```
 
-### 在仓库中本地运行
+### Run locally in the repository
 
 ```bash
 npm install
 npm start -- "#0f774a"
 ```
 
-`npm start` 会先执行构建，再运行 CLI 入口。对于本地开发和验证，这是最直接的方式。
+`npm start` runs the build first and then launches the CLI entry point. For local development and verification, this is the most direct workflow.
 
-## 快速开始
+## Quick Start
 
-1. 直接把一个颜色传给 CLI，默认会在终端输出 CSS：
+1. Pass a color directly to the CLI. By default, it prints CSS to the terminal:
 
 ```bash
 material-theme-cli "#0f774a"
 ```
 
-2. 如果你想写入文件，切换到 `file` 输出并指定路径：
+If you want a random theme, you can also use `random-color`:
+
+```bash
+material-theme-cli random-color
+```
+
+2. If you want to write the output to a file, switch to file output and specify a path:
 
 ```bash
 material-theme-cli "#0f774a" --format css --output file --path ./theme.css
 ```
 
-3. 如果颜色已经放在文本文件里，可以用 `--input` 读取：
+3. If the color is already stored in a text file, use `--input` to read it:
 
 ```text
 # color.txt
@@ -49,27 +57,27 @@ material-theme-cli "#0f774a" --format css --output file --path ./theme.css
 material-theme-cli --input ./color.txt --format json --output file --path ./theme.json
 ```
 
-## 使用教程
+## Usage Guide
 
-推荐的使用顺序很简单：先确定输入颜色，再选输出格式，最后决定是预览还是落盘。
+The recommended flow is simple: choose the input color, then the output format, then decide whether you want a preview or a file.
 
-1. 选择输入方式。
+1. Choose the input method.
 
-你可以直接传入 `[color]`，也可以使用 `--input <file-path>` 从文件读取。若同时提供两者，`--input` 会优先。
+You can pass `[color]` directly, or use `--input <file-path>` to read from a file. If both are provided, `--input` takes precedence.
 
-2. 选择输出方式。
+2. Choose the output method.
 
-默认输出到终端。如果要生成文件，使用 `--output file`，并用 `--path` 指定目标位置。若省略 `--path`，默认写到当前工作目录下的 `./output.<format>`。
+The default is terminal output. To generate a file, use `--output file` and set the destination with `--path`. If `--path` is omitted, the CLI writes to `./output.<format>` in the current working directory.
 
-3. 选择格式和主题参数。
+3. Choose the format and theme parameters.
 
-如果你只是想快速看效果，保持默认值即可。如果你要接入设计系统或多平台主题，再调整 `--variant`、`--contrast-level`、`--spec-version`、`--platform`，或者用 `--primary`、`--secondary` 等参数覆盖配色盘。
+If you just want a quick preview, keep the defaults. If you are integrating with a design system or multi-platform theme, adjust `--variant`, `--contrast-level`, `--spec-version`, and `--platform`, or override palettes with `--primary`, `--secondary`, and similar options.
 
-4. 需要筛选 token 时使用白名单或黑名单。
+4. Use a whitelist or blacklist when you need to filter tokens.
 
-`--token` 是白名单，`--exclude` 是黑名单。它们先把名字归一化为 kebab-case，再进行匹配，并且互斥。
+`--token` is a whitelist, and `--exclude` is a blacklist. The CLI normalizes names to kebab-case before matching, and the two options are mutually exclusive.
 
-## 命令用法
+## Command Usage
 
 ```bash
 material-theme-cli [color] \
@@ -93,7 +101,7 @@ material-theme-cli [color] \
   [--help]
 ```
 
-默认行为：
+Default behavior:
 
 - `--format css`
 - `--output console`
@@ -102,146 +110,149 @@ material-theme-cli [color] \
 - `--spec-version 2025`
 - `--platform phone`
 
-## 颜色输入格式
+## Color Input Formats
 
-CLI 接受的颜色语法如下：
+The CLI accepts the following color syntaxes:
 
-| 语法      | 示例                         | 说明                                                                                                       |
-| --------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Hex       | `#0f774a`                    | 支持 `#RGB`、`#RRGGBB`、`#RGBA`、`#RRGGBBAA`。纯数字的十六进制值必须保留前导 `#`，否则可能被当成整数解析。 |
-| RGB       | `rgb(15, 119, 74)`           | 通道可写成 `0-255` 的整数，或 `0%-100%` 的百分比。                                                         |
-| RGBA      | `rgba(15, 119, 74, 1)`       | 只接受完全不透明的 alpha，也就是 `1` 或 `100%`。                                                           |
-| LAB       | `lab(44.3, -15.2, 18.6)`     | 直接按 LAB 值转换。                                                                                        |
-| HCT       | `hct(270, 75, 50)`           | 适合直接输入 Material 色彩模型参数。                                                                       |
-| ARGB 函数 | `argb(0xff0f774a)`           | 只接受一个 ARGB 整数。                                                                                     |
-| ARGB 整数 | `0xff0f774a` 或 `4278851722` | 支持十进制或 `0x` 前缀形式。                                                                               |
+| Syntax   | Example                      | Description                                                                                                                                 |
+| -------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hex      | `#0f774a`                    | Supports `#RGB`, `#RRGGBB`, `#RGBA`, and `#RRGGBBAA`. Pure hexadecimal values must keep the leading `#`, or they may be parsed as integers. |
+| RGB      | `rgb(15, 119, 74)`           | Channels can be integers in the range `0-255`, or percentages from `0%-100%`.                                                               |
+| RGBA     | `rgba(15, 119, 74, 1)`       | Only fully opaque alpha is accepted, meaning `1` or `100%`.                                                                                 |
+| LAB      | `lab(44.3, -15.2, 18.6)`     | Converted directly from LAB values.                                                                                                         |
+| HCT      | `hct(270, 75, 50)`           | Useful when you want to provide Material color model values directly.                                                                       |
+| ARGB fn  | `argb(0xff0f774a)`           | Accepts a single ARGB integer.                                                                                                              |
+| ARGB int | `0xff0f774a` or `4278851722` | Supports decimal and `0x`-prefixed integers.                                                                                                |
+| Random   | `random-color`               | Generates an opaque random color.                                                                                                           |
 
-如果输入为空或格式不支持，CLI 会直接报错并退出。
+If the input is empty or unsupported, the CLI exits with an error.
 
-## 命令选项文档
+`random-color` can be used in the positional argument, in `--input` file contents, and in the palette override options `--primary`, `--secondary`, `--tertiary`, `--error`, `--neutral`, and `--neutral-variant`.
 
-### 输入与输出
+## Command Options
 
-| 选项                              | 默认值              | 说明                                                                                                                          |
-| --------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `[color]`                         | 无                  | 位置参数，直接传入颜色值。                                                                                                    |
-| `--input <file-path>`             | 无                  | 从文件读取源色文本，读取后会去掉首尾空白。路径按当前工作目录解析。                                                            |
-| `--format <format>`               | `css`               | 输出格式，支持 `css`、`json`、`xml`、`yaml`、`js`、`ts`、`csv`。                                                              |
-| `--output <target>`               | `console`           | `console` 直接打印到终端；`file` 写入文件。                                                                                   |
-| `--path <output-file-path>`       | `./output.<format>` | 当 `--output file` 时使用。路径按当前工作目录解析。                                                                           |
-| `--make-js <output-js-file-path>` | 无                  | 生成一个可复用的 ESM 包装脚本。它会把当前 CLI 配置固化进去，并在运行时调用 `dist/index.js`。它和 `--format js` 不是同一件事。 |
-| `--help`                          | 无                  | 显示帮助信息。                                                                                                                |
+### Input and Output
 
-### 主题与配色
+| Option                            | Default             | Description                                                                                                                                                                                                                                     |
+| --------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[color]`                         | none                | Positional argument for passing the color value directly.                                                                                                                                                                                       |
+| `--input <file-path>`             | none                | Reads the source color text from a file, trimming leading and trailing whitespace. The path is resolved relative to the current working directory.                                                                                              |
+| `--format <format>`               | `css`               | Output format. Supported values: `css`, `json`, `xml`, `yaml`, `js`, `ts`, and `csv`.                                                                                                                                                           |
+| `--output <target>`               | `console`           | `console` prints to the terminal; `file` writes to disk.                                                                                                                                                                                        |
+| `--path <output-file-path>`       | `./output.<format>` | Used when `--output file` is selected. The path is resolved relative to the current working directory.                                                                                                                                          |
+| `--make-js <output-js-file-path>` | none                | Generates a reusable ESM wrapper script. It captures the current CLI configuration and calls `dist/index.js` at runtime. If the input uses `random-color`, the generated script re-randomizes at runtime. This is different from `--format js`. |
+| `--help`                          | none                | Displays help information.                                                                                                                                                                                                                      |
 
-| 选项                                | 默认值       | 说明                                                                                                                                                                                                                           |
-| ----------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--variant <variant>`               | `TONAL_SPOT` | 动态方案变体。可用值包括：`0` = `MONOCHROME`，`1` = `NEUTRAL`，`2` = `TONAL_SPOT` / `TONALSPOT`，`3` = `VIBRANT`，`4` = `EXPRESSIVE`，`5` = `FIDELITY`，`6` = `CONTENT`，`7` = `RAINBOW`，`8` = `FRUIT_SALAD` / `FRUITSALAD`。 |
-| `--contrast-level <contrast-level>` | `1`          | 对比度级别，只接受 `-1`、`0`、`1`。                                                                                                                                                                                            |
-| `--spec-version <spec-version>`     | `2025`       | 设计规范版本，只接受 `2021` 或 `2025`。                                                                                                                                                                                        |
-| `--platform <platform>`             | `phone`      | 目标平台，只接受 `phone` 或 `watch`。                                                                                                                                                                                          |
-| `--primary <color>`                 | 无           | 覆盖 primary 配色盘。                                                                                                                                                                                                          |
-| `--secondary <color>`               | 无           | 覆盖 secondary 配色盘。                                                                                                                                                                                                        |
-| `--tertiary <color>`                | 无           | 覆盖 tertiary 配色盘。                                                                                                                                                                                                         |
-| `--error <color>`                   | 无           | 覆盖 error 配色盘。                                                                                                                                                                                                            |
-| `--neutral <color>`                 | 无           | 覆盖 neutral 配色盘。                                                                                                                                                                                                          |
-| `--neutral-variant <color>`         | 无           | 覆盖 neutral-variant 配色盘。                                                                                                                                                                                                  |
+### Theme and Palette
 
-这些颜色覆盖参数接受和源色相同的语法，也就是 Hex、RGB、RGBA、LAB、HCT、ARGB 函数和 ARGB 整数。
+| Option                              | Default      | Description                                                                                                                                                                                                                                           |
+| ----------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--variant <variant>`               | `TONAL_SPOT` | Dynamic scheme variant. Available values include: `0` = `MONOCHROME`, `1` = `NEUTRAL`, `2` = `TONAL_SPOT` / `TONALSPOT`, `3` = `VIBRANT`, `4` = `EXPRESSIVE`, `5` = `FIDELITY`, `6` = `CONTENT`, `7` = `RAINBOW`, `8` = `FRUIT_SALAD` / `FRUITSALAD`. |
+| `--contrast-level <contrast-level>` | `1`          | Contrast level. Only `-1`, `0`, and `1` are accepted.                                                                                                                                                                                                 |
+| `--spec-version <spec-version>`     | `2025`       | Design specification version. Only `2021` and `2025` are accepted.                                                                                                                                                                                    |
+| `--platform <platform>`             | `phone`      | Target platform. Only `phone` and `watch` are accepted.                                                                                                                                                                                               |
+| `--primary <color>`                 | none         | Overrides the primary palette.                                                                                                                                                                                                                        |
+| `--secondary <color>`               | none         | Overrides the secondary palette.                                                                                                                                                                                                                      |
+| `--tertiary <color>`                | none         | Overrides the tertiary palette.                                                                                                                                                                                                                       |
+| `--error <color>`                   | none         | Overrides the error palette.                                                                                                                                                                                                                          |
+| `--neutral <color>`                 | none         | Overrides the neutral palette.                                                                                                                                                                                                                        |
+| `--neutral-variant <color>`         | none         | Overrides the neutral-variant palette.                                                                                                                                                                                                                |
 
-### 过滤
+These palette override options accept the same syntax as the source color: Hex, RGB, RGBA, LAB, HCT, ARGB function, and ARGB integer.
 
-| 选项                        | 默认值 | 说明                                         |
-| --------------------------- | ------ | -------------------------------------------- |
-| `--token <token-name...>`   | 无     | 白名单，只保留这些 token。支持一次传多个值。 |
-| `--exclude <token-name...>` | 无     | 黑名单，排除这些 token。支持一次传多个值。   |
+### Filtering
 
-注意事项：
+| Option                      | Default | Description                                                   |
+| --------------------------- | ------- | ------------------------------------------------------------- |
+| `--token <token-name...>`   | none    | Whitelist. Keeps only these tokens. Supports multiple values. |
+| `--exclude <token-name...>` | none    | Blacklist. Removes these tokens. Supports multiple values.    |
 
-- `--token` 和 `--exclude` 互斥，不能同时使用。
-- 参与匹配的名称会先归一化为 kebab-case，所以 `primaryContainer`、`PRIMARY_CONTAINER`、`primary-container` 会被视为同一个名字。
-- 未识别的名称会发出警告，然后被忽略。
+Notes:
 
-## 使用案例
+- `--token` and `--exclude` are mutually exclusive.
+- Names are normalized to kebab-case before matching, so `primaryContainer`, `PRIMARY_CONTAINER`, and `primary-container` are treated as the same token.
+- Unknown names are reported as warnings and ignored.
 
-### 1. 终端预览，默认输出 CSS
+## Examples
+
+### 1. Terminal preview with the default CSS output
 
 ```bash
 material-theme-cli "#0f774a"
 ```
 
-### 2. 输出 CSS 文件
+### 2. Write CSS to a file
 
 ```bash
 material-theme-cli "#0f774a" --format css --output file --path ./theme.css
 ```
 
-### 3. 输出 JSON 文件
+### 3. Write JSON to a file
 
 ```bash
 material-theme-cli "#0f774a" --format json --output file --path ./theme.json
 ```
 
-### 4. 从文件读取颜色
+### 4. Read a color from a file
 
 ```bash
 material-theme-cli --input ./color.txt --format yaml --output file --path ./theme.yaml
 ```
 
-### 5. 生成 TypeScript 模块
+### 5. Generate a TypeScript module
 
-`js` 和 `ts` 的序列化内容一致，都会生成 `export const MdSysColor = { ... }` 这种模块源码。
+`js` and `ts` produce the same serialized content, both generating module source like `export const MdSysColor = { ... }`.
 
 ```bash
 material-theme-cli "#0f774a" --format ts --output file --path ./theme.ts
 ```
 
-### 6. 使用 token 白名单
+### 6. Use a token whitelist
 
 ```bash
 material-theme-cli "#0f774a" --token primary surface-tint on-primary
 ```
 
-### 7. 使用 token 黑名单
+### 7. Use a token blacklist
 
 ```bash
 material-theme-cli "#0f774a" --exclude surface-tint outline shadow
 ```
 
-### 8. 覆盖配色盘
+### 8. Override palettes
 
 ```bash
 material-theme-cli "#0f774a" --primary "#1d4ed8" --secondary "#14b8a6" --neutral "#111827"
 ```
 
-### 9. 调整方案、对比度和平台
+### 9. Adjust variant, contrast, and platform
 
 ```bash
 material-theme-cli "#0f774a" --variant FRUIT_SALAD --contrast-level 0 --spec-version 2025 --platform watch
 ```
 
-### 10. 生成可复用脚本
+### 10. Generate a reusable script
 
 ```bash
 material-theme-cli "#0f774a" --make-js ./scripts/theme-generator.js --format css --output file --path ./theme.css
 ```
 
-`--make-js` 会生成一个运行时脚本，把当前参数固化进去。该脚本依赖构建产物 `dist/index.js`，因此要在仓库构建完成后再执行它。
+`--make-js` generates a runtime script that captures the current parameters. The script depends on the built artifact `dist/index.js`, so run it only after the repository has been built.
 
-## 协议说明
+## Protocol
 
-### 输出协议
+### Output Protocol
 
-CLI 内部会先生成一组 `lightObject` 和 `darkObject`，再把它们序列化成不同格式。为了保证输出稳定，键会先归一化为 kebab-case，再按字母顺序排序。
+The CLI first generates a pair of `lightObject` and `darkObject` values, then serializes them into the chosen format. To keep output stable, keys are normalized to kebab-case and sorted alphabetically.
 
-- `css`：输出 `:root` 和 `--md-sys-color-*` 自定义属性，值使用 `light-dark(light, dark)`。
-- `json` / `yaml`：输出包含 `light`、`dark`、`scheme` 三个顶层节点的主题对象。
-- `xml`：输出 `resources` 节点，颜色名使用 `md_sys_color_*_light` 和 `md_sys_color_*_dark`。
-- `js` / `ts`：输出 `export const MdSysColor = { ... }` 模块源码，`Light`、`Dark`、`Scheme` 后缀分别表示浅色、深色和组合值。
-- `csv`：表头固定为 `scheme,token-name,color-value`，每个 token 会展开为三行，分别对应 `light`、`dark` 和 `scheme`。
+- `css`: emits `:root` and `--md-sys-color-*` custom properties using `light-dark(light, dark)` values.
+- `json` / `yaml`: emits a theme object with top-level `light`, `dark`, and `scheme` nodes.
+- `xml`: emits a `resources` node, with color names using `md_sys_color_*_light` and `md_sys_color_*_dark`.
+- `js` / `ts`: emits module source like `export const MdSysColor = { ... }`, where `Light`, `Dark`, and `Scheme` suffixes represent the light, dark, and combined values.
+- `csv`: uses the fixed header `scheme,token-name,color-value`, and expands each token into three rows for `light`, `dark`, and `scheme`.
 
-如果 `light` 和 `dark` 的归一化键不一致，序列化会失败，这能避免生成不完整的主题文件。
+If the normalized keys in `light` and `dark` do not match, serialization fails. This prevents incomplete theme files from being generated.
 
-### 开源协议
+### License
 
-本项目采用 MIT License 发布，详见 [LICENSE](LICENSE)。第三方依赖的许可条款分别以各自项目为准。
+This project is released under the MIT License. See [LICENSE](LICENSE) for details. Third-party dependencies are governed by their own license terms.

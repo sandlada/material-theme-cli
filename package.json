@@ -21,6 +21,7 @@
         "start": "node index.js",
         "prepack": "npm run build",
         "build": "rolldown -c --clean-dir",
+        "typecheck": "tsc --noEmit",
         "test": "vitest",
         "test:run": "vitest run"
     },

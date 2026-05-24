@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Hct, Variant } from '@material/material-color-utilities'
-import { MaterialColorService } from './material-color.service'
+import { MaterialColorService, type MaterialColorKebabCaseName } from './material-color.service'
 import { StringUtil } from '../utils/string-util';
 
 const sourceColor = Hct.fromInt(0xff6750a4)
@@ -91,12 +91,13 @@ describe('MaterialColorService', () => {
 
     it('applies whitelist filtering after normalizing names and warns about unknown entries', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        const whiteList = ['PrimaryContainer', 'primaryPalette', 'missingToken'] as unknown as MaterialColorKebabCaseName[]
 
         const theme = MaterialColorService.create({
             sourceColor,
             variant: Variant.TONAL_SPOT,
             palettes: {},
-            whiteList: ['PrimaryContainer', 'primaryPalette', 'missingToken'],
+            whiteList,
         })
 
         expect(theme.light.map((color) => color.kebabCasedName)).toEqual(['primary-container'])
@@ -110,12 +111,13 @@ describe('MaterialColorService', () => {
 
     it('applies blacklist filtering after normalizing names and warns about unknown entries', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        const blackList = ['surfaceVariant', 'neutralPalette', 'missingToken'] as unknown as MaterialColorKebabCaseName[]
 
         const theme = MaterialColorService.create({
             sourceColor,
             variant: Variant.TONAL_SPOT,
             palettes: {},
-            blackList: ['surfaceVariant', 'neutralPalette', 'missingToken'],
+            blackList,
         })
 
         expect(theme.light.map((color) => color.kebabCasedName).sort()).toEqual(allColorNames.filter((name) => name !== 'surface-variant').sort())

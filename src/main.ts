@@ -14,7 +14,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MakeJsService } from "./services/make-js.service";
 import { MaterialColorService, type MaterialColorKebabCaseName } from "./services/material-color.service";
-import { SerializationService, type SerializationFormat } from "./services/serialization.service";
+import { SerializationService, type PaletteSelector, type SerializationFormat } from "./services/serialization.service";
+import { StringUtil } from "./utils/string-util";
 
 export { MaterialColorService } from "./services/material-color.service";
 export { SerializationService } from "./services/serialization.service";
@@ -37,6 +38,12 @@ type CliPaletteOverrideKey =
 type CliPaletteOverrides = Partial<Record<CliPaletteOverrideKey, TonalPalette>>;
 type CliPaletteExpressions = Partial<Record<CliPaletteOverrideKey, string>>;
 
+type CliFilterSplit = {
+	themeNames: MaterialColorKebabCaseName[];
+	paletteSelectors: PaletteSelector[];
+	unknownNames: string[];
+};
+
 type ResolvedPaletteOverrides = {
 	palettes: CliPaletteOverrides;
 	paletteExpressions: CliPaletteExpressions;
@@ -51,6 +58,9 @@ type ParsedCommandOptions = {
 	input?: string;
 	token?: string[];
 	exclude?: string[];
+	palette?: boolean;
+	paletteOnly?: boolean;
+	paletteTones?: number[];
 	variant: Variant;
 	contrastLevel: -1 | 0 | 1;
 	specVersion: CliSpecVersion;
@@ -239,6 +249,27 @@ export function parseFormatOption(value: string): SerializationFormat {
 	return format;
 }
 
+export function parsePaletteToneListOption(value: string): number[] {
+	const trimmedValue = value.trim();
+
+	if (trimmedValue.length === 0) {
+		throw new Error("material-theme-cli: palette tones cannot be empty.");
+	}
+
+	const toneValues = trimmedValue
+		.split(/[\s,]+/)
+		.map((part) => part.trim())
+		.filter((part) => part.length > 0);
+
+	if (toneValues.length === 0) {
+		throw new Error("material-theme-cli: palette tones cannot be empty.");
+	}
+
+	const tones = toneValues.map((toneValue) => parsePaletteToneValue(toneValue));
+
+	return [...new Set(tones)].sort((left, right) => left - right);
+}
+
 export function parseOutputTargetOption(value: string): CliOutputTarget {
 	const normalizedValue = value.trim().toUpperCase();
 	const output = OutputAliases.get(normalizedValue) ?? (normalizedValue.toLowerCase() as CliOutputTarget);
@@ -281,13 +312,16 @@ function createCommand() {
 
 	command
 		.name("material-theme-cli")
-		.description("Generate Material Design theme tokens from HCT, hex, ARGB, RGB, LAB, or random-color values.")
+		.description("Generate Material Design theme and palette tokens from HCT, hex, ARGB, RGB, LAB, or random-color values.")
 		.argument("[color]", "source color value or random-color")
 		.option("--input <file-path>", "read the source color value from a file")
 		.option("--format <format>", "serialization format", parseFormatOption, "css")
 		.option("--output <target>", "output target", parseOutputTargetOption, "console")
 		.option("--path <output-file-path>", "file path used when output is set to file")
 		.option("--make-js <output-js-file-path>", "shortcut for --format js --output file")
+		.option("--no-palette", "skip palette output")
+		.option("--palette-only", "emit palette tokens only")
+		.option("--palette-tones <tone-list>", "palette tones to generate, such as 0,1,2", parsePaletteToneListOption)
 		.option("--token <token-name...>", "token names to keep")
 		.option("--exclude <token-name...>", "token names to exclude")
 		.option("--variant <variant>", "dynamic scheme variant", parseVariantOption, Variant.TONAL_SPOT)
@@ -316,8 +350,27 @@ async function executeCommand(command: Command, colorValue: string | undefined, 
 
 	const sourceColorInput = resolveColorInput(sourceColorValue);
 	const palettes = buildPaletteOverrides(options);
-	const whiteList = normalizeColorNameList(options.token);
-	const blackList = normalizeColorNameList(options.exclude);
+	const tokenFilters = splitFilterNames(options.token);
+	const excludeFilters = splitFilterNames(options.exclude);
+	const includePalette = options.palette !== false;
+	const includeTheme = options.paletteOnly !== true;
+	const paletteTones = options.paletteTones;
+
+	if (!includeTheme && !includePalette) {
+		throw new Error("material-theme-cli: --palette-only cannot be used with --no-palette.");
+	}
+
+	if (!includePalette && (paletteTones !== undefined || tokenFilters.paletteSelectors.length > 0 || excludeFilters.paletteSelectors.length > 0)) {
+		throw new Error("material-theme-cli: palette selectors require palette output.");
+	}
+
+	if (tokenFilters.unknownNames.length > 0) {
+		console.warn(`material-theme-cli: unknown token names ignored: ${tokenFilters.unknownNames.join(", ")}`);
+	}
+
+	if (excludeFilters.unknownNames.length > 0) {
+		console.warn(`material-theme-cli: unknown exclude names ignored: ${excludeFilters.unknownNames.join(", ")}`);
+	}
 
 	if (options.makeJs) {
 		const generatedScript = MakeJsService.create({
@@ -328,8 +381,13 @@ async function executeCommand(command: Command, colorValue: string | undefined, 
 			specVersion: options.specVersion,
 			platform: options.platform,
 			palettes: palettes.paletteExpressions,
-			whiteList,
-			blackList,
+			themeWhiteList: tokenFilters.themeNames,
+			themeBlackList: excludeFilters.themeNames,
+			paletteWhiteList: tokenFilters.paletteSelectors,
+			paletteBlackList: excludeFilters.paletteSelectors,
+			includePalette,
+			paletteOnly: !includeTheme,
+			paletteTones,
 			format: options.format,
 			output: options.output,
 			path: options.path,
@@ -347,13 +405,18 @@ async function executeCommand(command: Command, colorValue: string | undefined, 
 		specVersion: options.specVersion,
 		platform: options.platform,
 		palettes: palettes.palettes,
-		...(whiteList.length > 0 ? { whiteList: whiteList as MaterialColorKebabCaseName[] } : {}),
-		...(blackList.length > 0 ? { blackList: blackList as MaterialColorKebabCaseName[] } : {}),
+		...(tokenFilters.themeNames.length > 0 ? { whiteList: tokenFilters.themeNames } : {}),
+		...(excludeFilters.themeNames.length > 0 ? { blackList: excludeFilters.themeNames } : {}),
 	});
 
 	const serializedTheme = SerializationService.serialize({
-		lightObject: theme.lightObject,
-		darkObject: theme.darkObject,
+		lightObject: includeTheme ? theme.lightObject : {},
+		darkObject: includeTheme ? theme.darkObject : {},
+		palettes: includePalette ? theme.palettes : undefined,
+		paletteWhiteList: tokenFilters.paletteSelectors.length > 0 ? tokenFilters.paletteSelectors : undefined,
+		paletteBlackList: excludeFilters.paletteSelectors.length > 0 ? excludeFilters.paletteSelectors : undefined,
+		includeTheme,
+		paletteTones,
 		format: options.format,
 	});
 
@@ -418,6 +481,83 @@ function normalizeColorNameList(values?: string[]) {
 	return (values ?? [])
 		.map((value) => value.trim())
 		.filter((value) => value.length > 0);
+}
+
+function splitFilterNames(values?: string[]): CliFilterSplit {
+	const themeNames: MaterialColorKebabCaseName[] = [];
+	const paletteSelectors: PaletteSelector[] = [];
+	const unknownNames: string[] = [];
+	const seenThemeNames = new Set<string>();
+	const seenPaletteSelectors = new Set<string>();
+
+	for (const value of normalizeColorNameList(values)) {
+		const normalizedValue = StringUtil.toKebabCase(value);
+
+		if (normalizedValue.length === 0) {
+			continue;
+		}
+
+		if (normalizedValue.startsWith("palette-")) {
+			const paletteSelector = parsePaletteSelector(normalizedValue);
+
+			if (paletteSelector === undefined) {
+				unknownNames.push(normalizedValue);
+				continue;
+			}
+
+			const paletteSelectorKey = `${paletteSelector.family}-${paletteSelector.tone ?? ""}`;
+
+			if (!seenPaletteSelectors.has(paletteSelectorKey)) {
+				seenPaletteSelectors.add(paletteSelectorKey);
+				paletteSelectors.push(paletteSelector);
+			}
+
+			continue;
+		}
+
+		if (!seenThemeNames.has(normalizedValue)) {
+			seenThemeNames.add(normalizedValue);
+			themeNames.push(normalizedValue as MaterialColorKebabCaseName);
+		}
+	}
+
+	return { themeNames, paletteSelectors, unknownNames };
+}
+
+function parsePaletteSelector(value: string): PaletteSelector | undefined {
+	const normalizedValue = value.replace(/^palette-/u, "");
+	const match = normalizedValue.match(/^(primary|secondary|tertiary|error|neutral|neutral-variant)(?:-(\d{1,3}))?$/u);
+
+	if (match === null) {
+		return undefined;
+	}
+
+	if (match[2] === undefined) {
+		return { family: match[1] as PaletteSelector["family"] };
+	}
+
+	if (!/^(?:100|[1-9]?\d)$/u.test(match[2])) {
+		return undefined;
+	}
+
+	return {
+		family: match[1] as PaletteSelector["family"],
+		tone: parsePaletteToneValue(match[2]),
+	};
+}
+
+function parsePaletteToneValue(value: string) {
+	if (!/^(?:100|[1-9]?\d)$/u.test(value)) {
+		throw new Error(`material-theme-cli: unsupported palette tone "${value}". Expected integers between 0 and 100.`);
+	}
+
+	const tone = Number(value);
+
+	if (!Number.isInteger(tone) || tone < 0 || tone > 100) {
+		throw new Error(`material-theme-cli: unsupported palette tone "${value}". Expected integers between 0 and 100.`);
+	}
+
+	return tone;
 }
 
 function splitColorArguments(argumentText: string) {

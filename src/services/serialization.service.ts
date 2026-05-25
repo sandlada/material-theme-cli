@@ -1,11 +1,29 @@
-import { hexFromArgb } from "@material/material-color-utilities";
+import { hexFromArgb, type TonalPalette } from "@material/material-color-utilities";
 import { XMLBuilder } from "fast-xml-parser";
 import { dump as dumpYaml } from "js-yaml";
+import { DefaultPaletteTones, MaterialPaletteService } from "./material-palette.service";
 import { StringUtil } from "../utils/string-util";
 
 export type SerializationFormat = "css" | "json" | "xml" | "yaml" | "js" | "ts" | "csv";
 
 type ThemeObject = Record<string, unknown>;
+
+type ThemePaletteName =
+    | "primaryPalette"
+    | "secondaryPalette"
+    | "tertiaryPalette"
+    | "errorPalette"
+    | "neutralPalette"
+    | "neutralVariantPalette";
+
+export type PaletteSelectorFamilyName = "primary" | "secondary" | "tertiary" | "error" | "neutral" | "neutral-variant";
+
+export type PaletteSelector = {
+    family: PaletteSelectorFamilyName;
+    tone?: number;
+};
+
+type ThemePalettes = Partial<Record<ThemePaletteName, Pick<TonalPalette, "tone">>>;
 
 type ThemeEntry = {
     normalizedKey: string;
@@ -19,11 +37,39 @@ type ThemeEntry = {
     schemeValue: string;
 };
 
+type PaletteEntry = {
+    normalizedKey: string;
+    jsonKey: string;
+    cssKey: string;
+    xmlKey: string;
+    value: string;
+};
+
+type ThemeRecord = {
+    light: Record<string, string>;
+    dark: Record<string, string>;
+    scheme: Record<string, string>;
+    palette?: Record<string, string>;
+};
+
 const XmlDeclaration = '<?xml version="1.0" encoding="utf-8"?>\n';
-const ModuleExportName = "MdSysColor";
+const ModuleColorExportName = "MdSysColor";
+const ModulePaletteExportName = "MdSysPalette";
 const CssPrefix = "--md-sys-color-";
+const CssPalettePrefix = "--md-sys-palette-";
 const JsonPrefix = "md-sys-color-";
+const JsonPalettePrefix = "md-sys-palette-";
 const XmlPrefix = "md_sys_color_";
+const XmlPalettePrefix = "md_sys_palette_";
+
+const ThemePaletteOrder: ThemePaletteName[] = [
+    "primaryPalette",
+    "secondaryPalette",
+    "tertiaryPalette",
+    "errorPalette",
+    "neutralPalette",
+    "neutralVariantPalette",
+];
 
 const xmlBuilder = new XMLBuilder({
     ignoreAttributes: false,
@@ -36,66 +82,77 @@ const xmlBuilder = new XMLBuilder({
 export class SerializationService {
     private constructor() { }
 
-    public static serialize(args: { lightObject: ThemeObject; darkObject: ThemeObject; format: SerializationFormat }) {
+    public static serialize(args: {
+        lightObject: ThemeObject;
+        darkObject: ThemeObject;
+        format: SerializationFormat;
+        includeTheme?: boolean;
+        palettes?: ThemePalettes;
+        paletteWhiteList?: PaletteSelector[];
+        paletteBlackList?: PaletteSelector[];
+        paletteTones?: number[];
+    }) {
+        const includeTheme = args.includeTheme !== false;
         const themeEntries = this.normalizeThemeEntries(args.lightObject, args.darkObject);
+        const paletteEntries = this.normalizePaletteEntries(args.palettes, args.paletteTones, args.paletteWhiteList, args.paletteBlackList);
 
         if (args.format === "css") {
-            return this.toCss(themeEntries);
+            return this.toCss(themeEntries, paletteEntries, includeTheme);
         }
 
         if (args.format === "json") {
-            return this.toJson(themeEntries);
+            return this.toJson(themeEntries, paletteEntries, includeTheme);
         }
 
         if (args.format === "xml") {
-            return this.toXml(themeEntries);
+            return this.toXml(themeEntries, paletteEntries, includeTheme);
         }
 
         if (args.format === "yaml") {
-            return this.toYaml(themeEntries);
+            return this.toYaml(themeEntries, paletteEntries, includeTheme);
         }
 
         if (args.format === "js") {
-            return this.toModuleSource(themeEntries);
+            return this.toModuleSource(themeEntries, paletteEntries, includeTheme);
         }
 
         if (args.format === "ts") {
-            return this.toModuleSource(themeEntries);
+            return this.toModuleSource(themeEntries, paletteEntries, includeTheme);
         }
 
         if (args.format === "csv") {
-            return this.toCsv(themeEntries);
+            return this.toCsv(themeEntries, paletteEntries, includeTheme);
         }
 
         throw new TypeError(`SerializationService.serialize: unsupported format "${args.format}".`);
     }
 
-    public static toCSS(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "css" });
+    public static toCSS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "css" });
     }
 
-    public static toJSON(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "json" });
+    public static toJSON(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "json" });
     }
 
-    public static toXML(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "xml" });
+    public static toXML(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "xml" });
     }
 
-    public static toYAML(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "yaml" });
+    public static toYAML(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "yaml" });
     }
 
-    public static toJS(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "js" });
+    public static toJS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "js" });
     }
 
-    public static toTS(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "ts" });
+    public static toTS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "ts" });
     }
 
-    public static toCSV(args: { lightObject: ThemeObject; darkObject: ThemeObject }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, format: "csv" });
+    public static toCSV(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
+        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "csv" });
     }
 
     private static normalizeThemeEntries(lightObject: ThemeObject, darkObject: ThemeObject): ThemeEntry[] {
@@ -135,6 +192,114 @@ export class SerializationService {
         });
     }
 
+    private static normalizePaletteEntries(palettes?: ThemePalettes, paletteTones?: number[], paletteWhiteList?: PaletteSelector[], paletteBlackList?: PaletteSelector[]) {
+        if (palettes === undefined) {
+            return [];
+        }
+
+        const tones = this.normalizePaletteTones(paletteTones);
+        const whiteList = this.normalizePaletteSelectors(paletteWhiteList);
+        const blackList = this.normalizePaletteSelectors(paletteBlackList);
+        const paletteEntries: PaletteEntry[] = [];
+
+        for (const paletteName of ThemePaletteOrder) {
+            const palette = palettes[paletteName];
+
+            if (palette === undefined) {
+                continue;
+            }
+
+            const normalizedPaletteName = this.toPaletteTokenName(paletteName);
+
+            for (const toneEntry of MaterialPaletteService.create({ palette, tones })) {
+                if (whiteList !== undefined && !whiteList.some((selector) => this.matchesPaletteSelector(selector, normalizedPaletteName, toneEntry.tone))) {
+                    continue;
+                }
+
+                if (blackList !== undefined && blackList.some((selector) => this.matchesPaletteSelector(selector, normalizedPaletteName, toneEntry.tone))) {
+                    continue;
+                }
+
+                const normalizedKey = `${normalizedPaletteName}-${toneEntry.tone}`;
+                const value = hexFromArgb(toneEntry.color);
+
+                paletteEntries.push({
+                    normalizedKey,
+                    jsonKey: `${JsonPalettePrefix}${normalizedKey}`,
+                    cssKey: `${CssPalettePrefix}${normalizedKey}`,
+                    xmlKey: `${XmlPalettePrefix}${StringUtil.toSnakeCase(normalizedKey)}`,
+                    value,
+                });
+            }
+        }
+
+        return paletteEntries;
+    }
+
+    private static normalizePaletteSelectors(values?: PaletteSelector[]) {
+        if (values === undefined || values.length === 0) {
+            return undefined;
+        }
+
+        return values.map((value) => this.normalizePaletteSelector(value));
+    }
+
+    private static normalizePaletteSelector(selector: PaletteSelector): PaletteSelector {
+        const family = this.normalizePaletteSelectorFamily(selector.family);
+
+        if (selector.tone === undefined) {
+            return { family };
+        }
+
+        return {
+            family,
+            tone: this.normalizePaletteTone(selector.tone),
+        };
+    }
+
+    private static normalizePaletteSelectorFamily(value: string) {
+        const normalizedValue = StringUtil.toKebabCase(value).replace(/^palette-/u, "");
+
+        if (
+            normalizedValue !== "primary" &&
+            normalizedValue !== "secondary" &&
+            normalizedValue !== "tertiary" &&
+            normalizedValue !== "error" &&
+            normalizedValue !== "neutral" &&
+            normalizedValue !== "neutral-variant"
+        ) {
+            throw new TypeError(`SerializationService: unsupported palette family "${value}".`);
+        }
+
+        return normalizedValue as PaletteSelectorFamilyName;
+    }
+
+    private static matchesPaletteSelector(selector: PaletteSelector, family: string, tone: number) {
+        return selector.family === family && (selector.tone === undefined || selector.tone === tone);
+    }
+
+    private static normalizePaletteTones(tones?: number[]) {
+        if (tones === undefined) {
+            return [...DefaultPaletteTones];
+        }
+
+        if (tones.length === 0) {
+            throw new TypeError("SerializationService: paletteTones cannot be empty.");
+        }
+
+        const normalizedTones = [...new Set(tones.map((tone) => this.normalizePaletteTone(tone)))];
+
+        return normalizedTones.sort((left, right) => left - right);
+    }
+
+    private static normalizePaletteTone(tone: number) {
+        if (!Number.isFinite(tone) || !Number.isInteger(tone) || tone < 0 || tone > 100) {
+            throw new TypeError("SerializationService: paletteTones must be integers between 0 and 100.");
+        }
+
+        return tone;
+    }
+
     private static normalizeThemeObject(object: ThemeObject, label: "lightObject" | "darkObject") {
         if (!this.isPlainObject(object)) {
             throw new TypeError(`SerializationService: ${label} must be a plain object.`);
@@ -163,6 +328,10 @@ export class SerializationService {
         }
 
         return new Map([...normalized.entries()].sort(([left], [right]) => left.localeCompare(right)));
+    }
+
+    private static toPaletteTokenName(paletteName: ThemePaletteName) {
+        return StringUtil.toKebabCase(paletteName.replace(/Palette$/u, ""));
     }
 
     private static toColorValue(value: unknown, context: string) {
@@ -201,36 +370,49 @@ export class SerializationService {
         const missingInDark = [...lightEntries.keys()].filter((key) => !darkEntries.has(key));
         const missingInLight = [...darkEntries.keys()].filter((key) => !lightEntries.has(key));
 
-        return `SerializationService.toCSS: lightObject and darkObject must contain the same normalized keys. Missing in darkObject: ${missingInDark.length > 0 ? missingInDark.join(", ") : "none"}; missing in lightObject: ${missingInLight.length > 0 ? missingInLight.join(", ") : "none"}.`;
+        return `SerializationService: lightObject and darkObject must contain the same normalized keys. Missing in darkObject: ${missingInDark.length > 0 ? missingInDark.join(", ") : "none"}; missing in lightObject: ${missingInLight.length > 0 ? missingInLight.join(", ") : "none"}.`;
     }
 
-    private static toCss(themeEntries: ThemeEntry[]) {
-        if (themeEntries.length === 0) {
+    private static toCss(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
+        if (includeTheme && themeEntries.length === 0 && paletteEntries.length === 0) {
             return `:root {\n}\n`;
         }
 
-        const declarations = themeEntries.map((entry) => `    ${entry.cssKey}: light-dark(${entry.lightValue}, ${entry.darkValue});`);
+        const declarations = [
+            ...(includeTheme ? themeEntries.map((entry) => `    ${entry.cssKey}: light-dark(${entry.lightValue}, ${entry.darkValue});`) : []),
+            ...paletteEntries.map((entry) => `    ${entry.cssKey}: ${entry.value};`),
+        ];
+
+        if (declarations.length === 0) {
+            return `:root {\n}\n`;
+        }
 
         return `:root {\n${declarations.join("\n")}\n}\n`;
     }
 
-    private static toJson(themeEntries: ThemeEntry[]) {
-        const record = this.createThemeRecord(themeEntries);
+    private static toJson(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
+        const record = this.createOutputRecord(themeEntries, paletteEntries, includeTheme);
 
         return `${JSON.stringify(record, null, 4)}\n`;
     }
 
-    private static toXml(themeEntries: ThemeEntry[]) {
-        const colors = themeEntries.flatMap((entry) => [
-            {
-                "@_name": entry.xmlLightKey,
-                "#text": entry.lightValue,
-            },
-            {
-                "@_name": entry.xmlDarkKey,
-                "#text": entry.darkValue,
-            },
-        ]);
+    private static toXml(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
+        const colors = [
+            ...(includeTheme ? themeEntries.flatMap((entry) => [
+                {
+                    "@_name": entry.xmlLightKey,
+                    "#text": entry.lightValue,
+                },
+                {
+                    "@_name": entry.xmlDarkKey,
+                    "#text": entry.darkValue,
+                },
+            ]) : []),
+            ...paletteEntries.map((entry) => ({
+                "@_name": entry.xmlKey,
+                "#text": entry.value,
+            })),
+        ];
 
         const xml = xmlBuilder.build({
             resources: colors.length > 0 ? { color: colors } : {},
@@ -239,8 +421,8 @@ export class SerializationService {
         return `${XmlDeclaration}${xml.endsWith("\n") ? xml : `${xml}\n`}`;
     }
 
-    private static toYaml(themeEntries: ThemeEntry[]) {
-        const record = this.createThemeRecord(themeEntries);
+    private static toYaml(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
+        const record = this.createOutputRecord(themeEntries, paletteEntries, includeTheme);
 
         return dumpYaml(record, {
             noRefs: true,
@@ -250,34 +432,35 @@ export class SerializationService {
         });
     }
 
-    private static toModuleSource(themeEntries: ThemeEntry[]) {
-        if (themeEntries.length === 0) {
-            return `export const ${ModuleExportName} = {\n};\n`;
+    private static toModuleSource(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
+        const sections: string[] = [];
+
+        if (includeTheme) {
+            sections.push(this.renderThemeModuleSource(themeEntries).trimEnd());
         }
 
-        const lines = themeEntries.flatMap((entry) => [
-            `    ${this.formatModulePropertyName(entry.moduleBaseName, "Light")}: ${JSON.stringify(entry.lightValue)},`,
-            `    ${this.formatModulePropertyName(entry.moduleBaseName, "Dark")}: ${JSON.stringify(entry.darkValue)},`,
-            `    ${this.formatModulePropertyName(entry.moduleBaseName, "Scheme")}: ${JSON.stringify(entry.schemeValue)},`,
-        ]);
+        if (paletteEntries.length > 0 || !includeTheme) {
+            sections.push(this.renderPaletteModuleSource(paletteEntries).trimEnd());
+        }
 
-        return `export const ${ModuleExportName} = {\n${lines.join("\n")}\n};\n`;
+        return `${sections.join("\n\n")}\n`;
     }
 
-    private static toCsv(themeEntries: ThemeEntry[]) {
+    private static toCsv(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
         const rows = [
             "scheme,token-name,color-value",
-            ...themeEntries.flatMap((entry) => [
+            ...(includeTheme ? themeEntries.flatMap((entry) => [
                 `light,${this.escapeCsvCell(entry.normalizedKey)},${this.escapeCsvCell(entry.lightValue)}`,
                 `dark,${this.escapeCsvCell(entry.normalizedKey)},${this.escapeCsvCell(entry.darkValue)}`,
                 `scheme,${this.escapeCsvCell(entry.normalizedKey)},${this.escapeCsvCell(entry.schemeValue)}`,
-            ]),
+            ]) : []),
+            ...paletteEntries.map((entry) => `palette,${this.escapeCsvCell(entry.normalizedKey)},${this.escapeCsvCell(entry.value)}`),
         ];
 
         return `${rows.join("\n")}\n`;
     }
 
-    private static createThemeRecord(themeEntries: ThemeEntry[]) {
+    private static createThemeRecord(themeEntries: ThemeEntry[]): ThemeRecord {
         const light: Record<string, string> = {};
         const dark: Record<string, string> = {};
         const scheme: Record<string, string> = {};
@@ -293,6 +476,56 @@ export class SerializationService {
             dark,
             scheme,
         };
+    }
+
+    private static createOutputRecord(themeEntries: ThemeEntry[], paletteEntries: PaletteEntry[], includeTheme: boolean) {
+        const record: ThemeRecord = includeTheme ? this.createThemeRecord(themeEntries) : {} as ThemeRecord;
+
+        if (includeTheme) {
+            if (paletteEntries.length > 0) {
+                record.palette = this.createPaletteRecord(paletteEntries);
+            }
+
+            return record;
+        }
+
+        record.palette = this.createPaletteRecord(paletteEntries);
+
+        return record;
+    }
+
+    private static createPaletteRecord(paletteEntries: PaletteEntry[]) {
+        const palette: Record<string, string> = {};
+
+        for (const entry of paletteEntries) {
+            palette[entry.jsonKey] = entry.value;
+        }
+
+        return palette;
+    }
+
+    private static renderThemeModuleSource(themeEntries: ThemeEntry[]) {
+        if (themeEntries.length === 0) {
+            return `export const ${ModuleColorExportName} = {\n};\n`;
+        }
+
+        const lines = themeEntries.flatMap((entry) => [
+            `    ${this.formatModulePropertyName(entry.moduleBaseName, "Light")}: ${JSON.stringify(entry.lightValue)},`,
+            `    ${this.formatModulePropertyName(entry.moduleBaseName, "Dark")}: ${JSON.stringify(entry.darkValue)},`,
+            `    ${this.formatModulePropertyName(entry.moduleBaseName, "Scheme")}: ${JSON.stringify(entry.schemeValue)},`,
+        ]);
+
+        return `export const ${ModuleColorExportName} = {\n${lines.join("\n")}\n};\n`;
+    }
+
+    private static renderPaletteModuleSource(paletteEntries: PaletteEntry[]) {
+        if (paletteEntries.length === 0) {
+            return `export const ${ModulePaletteExportName} = {\n};\n`;
+        }
+
+        const lines = paletteEntries.map((entry) => `    ${JSON.stringify(entry.jsonKey)}: ${JSON.stringify(entry.value)},`);
+
+        return `export const ${ModulePaletteExportName} = {\n${lines.join("\n")}\n};\n`;
     }
 
     private static formatModulePropertyName(baseName: string, suffix: "Light" | "Dark" | "Scheme") {

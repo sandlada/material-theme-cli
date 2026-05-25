@@ -11,6 +11,7 @@ import {
     parseContrastLevelOption,
     parseFormatOption,
     parsePlatformOption,
+    parsePaletteToneListOption,
     parseSpecVersionOption,
     parseVariantOption,
 } from "../main"
@@ -37,11 +38,13 @@ describe("CLI parsing", () => {
         expect(parsePlatformOption("WATCH")).toBe("watch")
         expect(parseContrastLevelOption("1")).toBe(1)
         expect(parseSpecVersionOption("2025")).toBe("2025")
+        expect(parsePaletteToneListOption("0, 1, 1, 2")).toEqual([0, 1, 2])
     })
 
     it("rejects invalid CLI values early", () => {
         expect(() => parseColorInput("not-a-color")).toThrow("unsupported color value")
         expect(() => parseVariantOption("unknown")).toThrow("unsupported variant")
         expect(() => parseFormatOption("markdown")).toThrow("unsupported format")
+        expect(() => parsePaletteToneListOption("101")).toThrow("unsupported palette tone")
     })
 })

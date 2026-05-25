@@ -54,6 +54,7 @@ describe("CLI integration", () => {
         expect(stdout).toBe(SerializationService.toCSS({
             lightObject: expectedTheme.lightObject,
             darkObject: expectedTheme.darkObject,
+            palettes: expectedTheme.palettes,
         }))
     })
 
@@ -64,6 +65,78 @@ describe("CLI integration", () => {
         expect(stderr).toBe("")
         expect(stdout).toContain(":root {")
         expect(stdout).toContain("--md-sys-color-")
+        expect(stdout).toContain("--md-sys-palette-")
+    })
+
+    it("can skip palette output when requested", async () => {
+        const { stdout, stderr, exitCode } = await runCliAndCapture(["node", "material-theme-cli", "#0f774a", "--no-palette"])
+
+        const expectedTheme = MaterialColorService.create({
+            sourceColor: Hct.fromInt(argbFromHex("#0f774a")),
+            variant: Variant.TONAL_SPOT,
+            contrast: 0,
+            specVersion: "2025",
+            platform: "phone",
+        })
+
+        expect(exitCode).toBeUndefined()
+        expect(stderr).toBe("")
+        expect(stdout).toBe(SerializationService.toCSS({
+            lightObject: expectedTheme.lightObject,
+            darkObject: expectedTheme.darkObject,
+        }))
+        expect(stdout).not.toContain("--md-sys-palette-")
+    })
+
+    it("limits palette tones when requested", async () => {
+        const { stdout, stderr, exitCode } = await runCliAndCapture(["node", "material-theme-cli", "#0f774a", "--palette-tones", "0, 1"])
+
+        expect(exitCode).toBeUndefined()
+        expect(stderr).toBe("")
+        expect(stdout).toContain("--md-sys-palette-primary-0")
+        expect(stdout).toContain("--md-sys-palette-primary-1")
+        expect(stdout).not.toContain("--md-sys-palette-primary-2")
+    })
+
+    it("emits only the selected palette family in palette-only mode", async () => {
+        const { stdout, stderr, exitCode } = await runCliAndCapture([
+            "node",
+            "material-theme-cli",
+            "#0f774a",
+            "--palette-only",
+            "--token",
+            "palette-primary",
+            "--palette-tones",
+            "1",
+        ])
+
+        expect(exitCode).toBeUndefined()
+        expect(stderr).toBe("")
+        expect(stdout).toContain("--md-sys-palette-primary-1")
+        expect(stdout).not.toContain("--md-sys-palette-primary-0")
+        expect(stdout).not.toContain("--md-sys-palette-secondary-")
+        expect(stdout).not.toContain("--md-sys-color-")
+        expect(stdout).not.toContain("light-dark(")
+    })
+
+    it("emits only the selected palette tone in palette-only mode", async () => {
+        const { stdout, stderr, exitCode } = await runCliAndCapture([
+            "node",
+            "material-theme-cli",
+            "#0f774a",
+            "--palette-only",
+            "--token",
+            "palette-primary-50",
+        ])
+
+        expect(exitCode).toBeUndefined()
+        expect(stderr).toBe("")
+        expect(stdout).toContain("--md-sys-palette-primary-50")
+        expect(stdout).not.toContain("--md-sys-palette-primary-49")
+        expect(stdout).not.toContain("--md-sys-palette-primary-51")
+        expect(stdout).not.toContain("--md-sys-palette-secondary-")
+        expect(stdout).not.toContain("--md-sys-color-")
+        expect(stdout).not.toContain("light-dark(")
     })
 
     it("reads the source color from a file and writes JSON output to disk", async () => {
@@ -102,6 +175,7 @@ describe("CLI integration", () => {
             expect(await readFile(outputPath, "utf8")).toBe(SerializationService.toJSON({
                 lightObject: expectedTheme.lightObject,
                 darkObject: expectedTheme.darkObject,
+                palettes: expectedTheme.palettes,
             }))
         } finally {
             await rm(tempDir, { recursive: true, force: true })

@@ -1,6 +1,6 @@
 import { Variant, type Platform } from "@material/material-color-utilities";
 import { dirname, relative, resolve } from "node:path";
-import type { SerializationFormat } from "./serialization.service";
+import type { PaletteSelector, SerializationFormat } from "./serialization.service";
 
 type MakeJsPaletteName =
     | "primaryPalette"
@@ -20,8 +20,13 @@ export type MakeJsGenerationOptions = {
     specVersion: "2021" | "2025";
     platform: Platform;
     palettes: MakeJsPaletteExpressions;
-    whiteList: string[];
-    blackList: string[];
+    themeWhiteList: string[];
+    themeBlackList: string[];
+    paletteWhiteList: PaletteSelector[];
+    paletteBlackList: PaletteSelector[];
+    includePalette: boolean;
+    paletteOnly: boolean;
+    paletteTones?: number[];
     format: SerializationFormat;
     output: "console" | "file";
     path?: string;
@@ -54,8 +59,13 @@ export class MakeJsService {
             `    specVersion: ${JSON.stringify(args.specVersion)},`,
             `    platform: ${JSON.stringify(args.platform)},`,
             "    palettes,",
-            `    whiteList: ${JSON.stringify(args.whiteList)},`,
-            `    blackList: ${JSON.stringify(args.blackList)},`,
+            `    themeWhiteList: ${JSON.stringify(args.themeWhiteList)},`,
+            `    themeBlackList: ${JSON.stringify(args.themeBlackList)},`,
+            `    paletteWhiteList: ${JSON.stringify(args.paletteWhiteList)},`,
+            `    paletteBlackList: ${JSON.stringify(args.paletteBlackList)},`,
+            `    includePalette: ${JSON.stringify(args.includePalette)},`,
+            `    paletteOnly: ${JSON.stringify(args.paletteOnly)},`,
+            `    paletteTones: ${JSON.stringify(args.paletteTones)},`,
             `    format: ${JSON.stringify(args.format)},`,
             `    output: ${JSON.stringify(args.output)},`,
         ];
@@ -81,10 +91,24 @@ export class MakeJsService {
             ...configLines,
             "",
             "export function generateTheme() {",
-            "    const theme = MaterialColorService.create(config);",
+            "    const theme = MaterialColorService.create({",
+            "        sourceColor,",
+            "        variant: config.variant,",
+            "        contrast: config.contrast,",
+            "        specVersion: config.specVersion,",
+            "        platform: config.platform,",
+            "        palettes,",
+            "        ...(config.themeWhiteList.length > 0 ? { whiteList: config.themeWhiteList } : {}),",
+            "        ...(config.themeBlackList.length > 0 ? { blackList: config.themeBlackList } : {}),",
+            "    });",
             "    return SerializationService.serialize({",
-            "        lightObject: theme.lightObject,",
-            "        darkObject: theme.darkObject,",
+            "        lightObject: config.paletteOnly ? {} : theme.lightObject,",
+            "        darkObject: config.paletteOnly ? {} : theme.darkObject,",
+            "        includeTheme: !config.paletteOnly,",
+            "        palettes: config.includePalette ? theme.palettes : undefined,",
+            "        paletteWhiteList: config.paletteWhiteList,",
+            "        paletteBlackList: config.paletteBlackList,",
+            "        paletteTones: config.paletteTones,",
             "        format: config.format,",
             "    });",
             "}",

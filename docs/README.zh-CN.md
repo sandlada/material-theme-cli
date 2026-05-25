@@ -3,7 +3,7 @@
 ![npm version](https://img.shields.io/npm/v/@sandlada/material-theme-cli?label=NPM%20Version&labelColor=%2300531f&color=%23a3f5aa)
 ![GitHub License](https://img.shields.io/github/license/sandlada/material-theme-cli?label=License&labelColor=%2300531f&color=%23a3f5aa)
 
-一个基于 Material Design 动态色彩系统的 CLI。输入一个源色，它会生成可直接用于前端工程、设计令牌、脚本集成和批量导出的主题数据。
+一个基于 Material Design 动态色彩系统的 CLI。输入一个源色，它会生成可直接用于前端工程、设计令牌、脚本集成和批量导出的主题数据和 palette 令牌。
 
 运行环境：Node.js 22+，并且项目使用 ESM。
 
@@ -26,7 +26,7 @@ npm start -- "#0f774a"
 
 ## 快速开始
 
-1. 直接把一个颜色传给 CLI，默认会在终端输出 CSS：
+1. 直接把一个颜色传给 CLI，默认会在终端输出 CSS 主题和 palette 令牌：
 
 ```bash
 material-theme-cli "#0f774a"
@@ -69,7 +69,7 @@ material-theme-cli --input ./color.txt --format json --output file --path ./them
 
 3. 选择格式和主题参数。
 
-如果你只是想快速看效果，保持默认值即可。如果你要接入设计系统或多平台主题，再调整 `--variant`、`--contrast-level`、`--spec-version`、`--platform`，或者用 `--primary`、`--secondary` 等参数覆盖配色盘。
+如果你只是想快速看效果，保持默认值即可。如果你要接入设计系统或多平台主题，再调整 `--variant`、`--contrast-level`、`--spec-version`、`--platform`，或者用 `--primary`、`--secondary` 等参数覆盖配色盘，也可以用 `--no-palette`、`--palette-tones` 和类似 `palette-primary-50` 的 token 选择器控制 palette 输出。
 
 4. 需要筛选 token 时使用白名单或黑名单。
 
@@ -84,6 +84,9 @@ material-theme-cli [color] \
   [--output <console|file>] \
   [--path <output-file-path>] \
   [--make-js <output-js-file-path>] \
+  [--no-palette] \
+  [--palette-only] \
+  [--palette-tones <tone-list>] \
   [--variant <0-8|MONOCHROME|NEUTRAL|TONAL_SPOT|TONALSPOT|VIBRANT|EXPRESSIVE|FIDELITY|CONTENT|RAINBOW|FRUIT_SALAD|FRUITSALAD>] \
   [--contrast-level <-1|0|1>] \
   [--spec-version <2021|2025>] \
@@ -103,6 +106,8 @@ material-theme-cli [color] \
 
 - `--format css`
 - `--output console`
+- palette 输出默认开启
+- `--palette-tones 0..100`
 - `--variant TONAL_SPOT`
 - `--contrast-level 0`
 - `--spec-version 2025`
@@ -155,6 +160,9 @@ CLI 接受的颜色语法如下：
 | `--error <color>`                   | 无           | 覆盖 error 配色盘。                                                                                                                                                                                                            |
 | `--neutral <color>`                 | 无           | 覆盖 neutral 配色盘。                                                                                                                                                                                                          |
 | `--neutral-variant <color>`         | 无           | 覆盖 neutral-variant 配色盘。                                                                                                                                                                                                  |
+| `--no-palette`                      | 开启         | 关闭 palette 令牌输出，但主题令牌仍会正常输出。                                                                                                                                                                                |
+| `--palette-only`                    | 关闭         | 只输出 palette 令牌，跳过主题令牌。                                                                                                                                                                                            |
+| `--palette-tones <tone-list>`       | `0..100`     | 仅输出指定的 palette tone。支持用逗号或空格分隔的整数，范围是 `0` 到 `100`，例如 `0, 1`。                                                                                                                                      |
 
 这些颜色覆盖参数接受和源色相同的语法，也就是 Hex、RGB、RGBA、LAB、HCT、ARGB 函数和 ARGB 整数。
 
@@ -169,6 +177,8 @@ CLI 接受的颜色语法如下：
 
 - `--token` 和 `--exclude` 互斥，不能同时使用。
 - 参与匹配的名称会先归一化为 kebab-case，所以 `primaryContainer`、`PRIMARY_CONTAINER`、`primary-container` 会被视为同一个名字。
+- palette 选择器使用 `palette-` 前缀。`palette-primary` 或 `palette-neutral-variant` 会保留整个 family，而 `palette-primary-50` 会只保留单个 tone。
+- palette 选择器可以和 `--palette-only`、`--palette-tones` 搭配使用，把输出限制在指定的 palette token 上。
 - 未识别的名称会发出警告，然后被忽略。
 
 ## 使用案例
@@ -237,6 +247,24 @@ material-theme-cli "#0f774a" --make-js ./scripts/theme-generator.js --format css
 
 `--make-js` 会生成一个运行时脚本，把当前参数固化进去。该脚本依赖构建产物 `dist/index.js`，因此要在仓库构建完成后再执行它。
 
+### 11. 跳过 palette 输出
+
+```bash
+material-theme-cli "#0f774a" --no-palette
+```
+
+### 12. 限定 palette tone
+
+```bash
+material-theme-cli "#0f774a" --palette-tones "0, 1"
+```
+
+### 13. 只保留一个 palette tone
+
+```bash
+material-theme-cli "#0f774a" --palette-only --token palette-primary-50
+```
+
 ## 协议说明
 
 ### 输出协议
@@ -248,6 +276,14 @@ CLI 内部会先生成一组 `lightObject` 和 `darkObject`，再把它们序列
 - `xml`：输出 `resources` 节点，颜色名使用 `md_sys_color_*_light` 和 `md_sys_color_*_dark`。
 - `js` / `ts`：输出 `export const MdSysColor = { ... }` 模块源码，`Light`、`Dark`、`Scheme` 后缀分别表示浅色、深色和组合值。
 - `csv`：表头固定为 `scheme,token-name,color-value`，每个 token 会展开为三行，分别对应 `light`、`dark` 和 `scheme`。
+
+palette 输出默认会和主题输出一起生成。
+
+- `css`：额外输出 `--md-sys-palette-*` 自定义属性，值是固定的十六进制颜色，不使用 `light-dark()`。
+- `json` / `yaml`：额外输出顶层 `palette` 节点，使用 `md-sys-palette-*` 键。
+- `xml`：在 `resources` 下额外输出 `md_sys_palette_*` 颜色节点。
+- `js` / `ts`：额外输出 `export const MdSysPalette = { ... }` 模块对象，值是固定 palette 颜色。
+- `csv`：额外输出 `palette` 行，记录每个 palette tone。
 
 如果 `light` 和 `dark` 的归一化键不一致，序列化会失败，这能避免生成不完整的主题文件。
 

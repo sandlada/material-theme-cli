@@ -3,7 +3,7 @@
 ![npm version](https://img.shields.io/npm/v/@sandlada/material-theme-cli?label=NPM%20Version&labelColor=%2300531f&color=%23a3f5aa)
 ![GitHub License](https://img.shields.io/github/license/sandlada/material-theme-cli?label=License&labelColor=%2300531f&color=%23a3f5aa)
 
-A CLI based on the Material Design dynamic color system. Given a source color, it generates theme data that can be used directly in front-end projects, design tokens, script integrations, and bulk exports.
+A CLI based on the Material Design dynamic color system. Given a source color, it generates theme data and palette tokens that can be used directly in front-end projects, design tokens, script integrations, and bulk exports.
 
 Runtime requirements: Node.js 22+ and ESM.
 
@@ -28,7 +28,7 @@ npm start -- "#0f774a"
 
 ## Quick Start
 
-1. Pass a color directly to the CLI. By default, it prints CSS to the terminal:
+1. Pass a color directly to the CLI. By default, it prints CSS theme and palette tokens to the terminal:
 
 ```bash
 material-theme-cli "#0f774a"
@@ -71,7 +71,7 @@ The default is terminal output. To generate a file, use `--output file` and set 
 
 3. Choose the format and theme parameters.
 
-If you just want a quick preview, keep the defaults. If you are integrating with a design system or multi-platform theme, adjust `--variant`, `--contrast-level`, `--spec-version`, and `--platform`, or override palettes with `--primary`, `--secondary`, and similar options.
+If you just want a quick preview, keep the defaults. If you are integrating with a design system or multi-platform theme, adjust `--variant`, `--contrast-level`, `--spec-version`, and `--platform`, override palettes with `--primary`, `--secondary`, and similar options, or control palette output with `--no-palette`, `--palette-tones`, and token selectors such as `palette-primary-50`.
 
 4. Use a whitelist or blacklist when you need to filter tokens.
 
@@ -86,6 +86,9 @@ material-theme-cli [color] \
   [--output <console|file>] \
   [--path <output-file-path>] \
   [--make-js <output-js-file-path>] \
+  [--no-palette] \
+  [--palette-only] \
+  [--palette-tones <tone-list>] \
   [--variant <0-8|MONOCHROME|NEUTRAL|TONAL_SPOT|TONALSPOT|VIBRANT|EXPRESSIVE|FIDELITY|CONTENT|RAINBOW|FRUIT_SALAD|FRUITSALAD>] \
   [--contrast-level <-1|0|1>] \
   [--spec-version <2021|2025>] \
@@ -105,6 +108,8 @@ Default behavior:
 
 - `--format css`
 - `--output console`
+- palette output enabled by default
+- `--palette-tones 0..100`
 - `--variant TONAL_SPOT`
 - `--contrast-level 0`
 - `--spec-version 2025`
@@ -157,6 +162,9 @@ If the input is empty or unsupported, the CLI exits with an error.
 | `--error <color>`                   | none         | Overrides the error palette.                                                                                                                                                                                                                          |
 | `--neutral <color>`                 | none         | Overrides the neutral palette.                                                                                                                                                                                                                        |
 | `--neutral-variant <color>`         | none         | Overrides the neutral-variant palette.                                                                                                                                                                                                                |
+| `--no-palette`                      | enabled      | Disables palette token output. Theme tokens still render normally.                                                                                                                                                                                    |
+| `--palette-only`                    | off          | Emits palette tokens only and skips theme token output.                                                                                                                                                                                               |
+| `--palette-tones <tone-list>`       | `0..100`     | Limits palette output to the selected tones. Accepts comma- or space-separated integers from `0` to `100`, such as `0, 1`.                                                                                                                            |
 
 These palette override options accept the same syntax as the source color: Hex, RGB, RGBA, LAB, HCT, ARGB function, and ARGB integer.
 
@@ -171,6 +179,8 @@ Notes:
 
 - `--token` and `--exclude` are mutually exclusive.
 - Names are normalized to kebab-case before matching, so `primaryContainer`, `PRIMARY_CONTAINER`, and `primary-container` are treated as the same token.
+- Palette selectors use the `palette-` prefix. Use `palette-primary` or `palette-neutral-variant` to keep an entire family, or `palette-primary-50` to keep a single tone.
+- Palette selectors can be combined with `--palette-only` and `--palette-tones` to narrow output to specific palette tokens.
 - Unknown names are reported as warnings and ignored.
 
 ## Examples
@@ -239,6 +249,24 @@ material-theme-cli "#0f774a" --make-js ./scripts/theme-generator.js --format css
 
 `--make-js` generates a runtime script that captures the current parameters. The script depends on the built artifact `dist/index.js`, so run it only after the repository has been built.
 
+### 11. Skip palette output
+
+```bash
+material-theme-cli "#0f774a" --no-palette
+```
+
+### 12. Limit palette tones
+
+```bash
+material-theme-cli "#0f774a" --palette-tones "0, 1"
+```
+
+### 13. Keep a single palette tone
+
+```bash
+material-theme-cli "#0f774a" --palette-only --token palette-primary-50
+```
+
 ## Protocol
 
 ### Output Protocol
@@ -250,6 +278,14 @@ The CLI first generates a pair of `lightObject` and `darkObject` values, then se
 - `xml`: emits a `resources` node, with color names using `md_sys_color_*_light` and `md_sys_color_*_dark`.
 - `js` / `ts`: emits module source like `export const MdSysColor = { ... }`, where `Light`, `Dark`, and `Scheme` suffixes represent the light, dark, and combined values.
 - `csv`: uses the fixed header `scheme,token-name,color-value`, and expands each token into three rows for `light`, `dark`, and `scheme`.
+
+Palette output is included by default.
+
+- `css`: adds `--md-sys-palette-*` custom properties with fixed hex values and no `light-dark()` wrapper.
+- `json` / `yaml`: adds a top-level `palette` node with `md-sys-palette-*` keys.
+- `xml`: adds `md_sys_palette_*` color entries under `resources`.
+- `js` / `ts`: adds an `export const MdSysPalette = { ... }` object with fixed palette token values.
+- `csv`: adds `palette` rows for each palette token tone.
 
 If the normalized keys in `light` and `dark` do not match, serialization fails. This prevents incomplete theme files from being generated.
 

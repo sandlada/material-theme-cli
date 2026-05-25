@@ -14,8 +14,13 @@ describe("MakeJsService", () => {
             palettes: {
                 primaryPalette: 'Hct.fromInt(0xff0f774a)',
             },
-            whiteList: ["primary", "surface-tint"],
-            blackList: [],
+            themeWhiteList: ["primary", "surface-tint"],
+            themeBlackList: [],
+            paletteWhiteList: [{ family: "primary", tone: 50 }],
+            paletteBlackList: [],
+            includePalette: true,
+            paletteOnly: false,
+            paletteTones: [0, 1, 50],
             format: "css",
             output: "console",
         });
@@ -25,6 +30,11 @@ describe("MakeJsService", () => {
         expect(script).toContain('import { MaterialColorService, SerializationService } from "./dist/index.js";');
         expect(script).toContain('const sourceColor = Hct.fromInt(argbFromRgb(15, 119, 74));');
         expect(script).toContain('primaryPalette: TonalPalette.fromHct(Hct.fromInt(0xff0f774a))');
+        expect(script).toContain('includePalette: true,');
+        expect(script).toContain('paletteOnly: false,');
+        expect(script).toContain('paletteTones: [0,1,50],');
+        expect(script).toContain('themeWhiteList: ["primary","surface-tint"],');
+        expect(script).toContain('paletteWhiteList: [{"family":"primary","tone":50}],');
         expect(script).toContain('variant: Variant.TONAL_SPOT,');
         expect(script).toContain('format: "css",');
         expect(script).toContain('output: "console",');
@@ -43,8 +53,13 @@ describe("MakeJsService", () => {
             palettes: {
                 primaryPalette: "createRandomColor()",
             },
-            whiteList: [],
-            blackList: [],
+            themeWhiteList: [],
+            themeBlackList: [],
+            paletteWhiteList: [{ family: "primary" }],
+            paletteBlackList: [],
+            includePalette: true,
+            paletteOnly: true,
+            paletteTones: undefined,
             format: "css",
             output: "file",
             path: "./theme.css",
@@ -56,6 +71,9 @@ describe("MakeJsService", () => {
         expect(script).toContain('return Hct.fromInt(argbFromRgb(randomInt(256), randomInt(256), randomInt(256)));');
         expect(script).toContain('const sourceColor = createRandomColor();');
         expect(script).toContain('primaryPalette: TonalPalette.fromHct(createRandomColor())');
+        expect(script).toContain('includePalette: true,');
+        expect(script).toContain('paletteOnly: true,');
+        expect(script).toContain('paletteTones: undefined,');
     });
 
     it("resolves the bundle import path relative to the generated file location", () => {
@@ -67,8 +85,13 @@ describe("MakeJsService", () => {
             specVersion: "2025",
             platform: "phone",
             palettes: {},
-            whiteList: [],
-            blackList: [],
+            themeWhiteList: [],
+            themeBlackList: [],
+            paletteWhiteList: [],
+            paletteBlackList: [],
+            includePalette: false,
+            paletteOnly: false,
+            paletteTones: undefined,
             format: "css",
             output: "file",
             path: "./theme.css",

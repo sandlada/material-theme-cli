@@ -8,7 +8,7 @@ export default defineConfig({
         entryFileNames: 'index.js',
         format: 'esm',
     },
-    minify: false,
+    minify: true,
     sourcemap: true,
     platform: 'node'
 });

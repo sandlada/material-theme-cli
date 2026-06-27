@@ -1,6 +1,6 @@
 {
     "name": "@sandlada/material-theme-cli",
-    "version": "1.0.0-20260525.a",
+    "version": "1.0.0-20260627.a",
     "description": "Material Design CLI for generating theme tokens and serialized color outputs from a source color.",
     "main": "dist/index.js",
     "bin": {

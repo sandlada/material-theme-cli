@@ -3,9 +3,9 @@
 ![npm version](https://img.shields.io/npm/v/@sandlada/material-theme-cli?label=NPM%20Version&labelColor=%2300531f&color=%23a3f5aa)
 ![GitHub License](https://img.shields.io/github/license/sandlada/material-theme-cli?label=License&labelColor=%2300531f&color=%23a3f5aa)
 
-一个基于 Material Design 动态色彩系统的 CLI。输入一个源色，它会生成可直接用于前端工程、设计令牌、脚本集成和批量导出的主题数据和 palette 令牌。
+一个基于 Material Design 动态色彩系统的 CLI。给定一个源色，它会生成主题数据和 palette 令牌并输出到终端。
 
-运行环境：Node.js 22+，并且项目使用 ESM。
+运行环境：Node.js 22+，且项目使用 ESM。
 
 ## 安装
 
@@ -26,266 +26,227 @@ npm start -- "#0f774a"
 
 ## 快速开始
 
-1. 直接把一个颜色传给 CLI，默认会在终端输出 CSS 主题和 palette 令牌：
+CLI 有两个主要命令：`g c`（生成颜色 tokens）和 `g p`（生成 palette tokens）。
+
+### 生成颜色
 
 ```bash
-material-theme-cli "#0f774a"
+material-theme-cli g c "#0f774a"
 ```
 
-如果你想要随机主题，也可以直接使用 `random-color`：
+在终端输出全部 59 个 Material Design 颜色 tokens 的 CSS 自定义属性。
+
+### 生成主题化 Palettes
+
+从源色生成全部 6 个 Material palette family：
 
 ```bash
-material-theme-cli random-color
+material-theme-cli g p "#0f774a"
 ```
 
-2. 如果你想写入文件，切换到 `file` 输出并指定路径：
+### 生成自定义 Palette
+
+用自定义前缀创建单个 palette：
 
 ```bash
-material-theme-cli "#0f774a" --format css --output file --path ./theme.css
+material-theme-cli g p my-brand "#0f774a"
 ```
 
-3. 如果颜色已经放在文本文件里，可以用 `--input` 读取：
+## 使用指南
 
-```text
-# color.txt
-#0f774a
+### `g c` — 生成颜色
+
+```
+material-theme-cli g c [color] [options...]
 ```
 
-```bash
-material-theme-cli --input ./color.txt --format json --output file --path ./theme.json
+生成 59 个 Material Design 颜色 tokens（亮色 + 暗色方案）。CSS 模式下每个 token 输出 `light-dark()` 值，其他格式输出对应表达。
+
+### `g p` — 生成 Palettes
+
+根据参数个数区分两种模式：
+
+**主题化 palette**（1 个参数）：生成全部 6 个 palette family — `primary`、`secondary`、`tertiary`、`error`、`neutral`、`neutral-variant`。
+
+```
+material-theme-cli g p [color] [options...]
 ```
 
-## 使用教程
+**自定义 palette**（2 个参数）：生成单个 palette，使用自定义前缀。
 
-推荐的使用顺序很简单：先确定输入颜色，再选输出格式，最后决定是预览还是落盘。
-
-1. 选择输入方式。
-
-你可以直接传入 `[color]`，也可以使用 `--input <file-path>` 从文件读取。若同时提供两者，`--input` 会优先。
-
-2. 选择输出方式。
-
-默认输出到终端。如果要生成文件，使用 `--output file`，并用 `--path` 指定目标位置。若省略 `--path`，默认写到当前工作目录下的 `./output.<format>`。
-
-3. 选择格式和主题参数。
-
-如果你只是想快速看效果，保持默认值即可。如果你要接入设计系统或多平台主题，再调整 `--variant`、`--contrast-level`、`--spec-version`、`--platform`，或者用 `--primary`、`--secondary` 等参数覆盖配色盘，也可以用 `--no-palette`、`--palette-tones` 和类似 `palette-primary-50` 的 token 选择器控制 palette 输出。
-
-4. 需要筛选 token 时使用白名单或黑名单。
-
-`--token` 是白名单，`--exclude` 是黑名单。它们先把名字归一化为 kebab-case，再进行匹配，并且互斥。
-
-## 命令用法
-
-```bash
-material-theme-cli [color] \
-  [--input <file-path>] \
-  [--format <css|json|xml|yaml|js|ts|csv>] \
-  [--output <console|file>] \
-  [--path <output-file-path>] \
-  [--make-js <output-js-file-path>] \
-  [--no-palette] \
-  [--palette-only] \
-  [--palette-tones <tone-list>] \
-  [--variant <0-8|MONOCHROME|NEUTRAL|TONAL_SPOT|TONALSPOT|VIBRANT|EXPRESSIVE|FIDELITY|CONTENT|RAINBOW|FRUIT_SALAD|FRUITSALAD>] \
-  [--contrast-level <-1|0|1>] \
-  [--spec-version <2021|2025>] \
-  [--platform <phone|watch>] \
-  [--primary <color>] \
-  [--secondary <color>] \
-  [--tertiary <color>] \
-  [--error <color>] \
-  [--neutral <color>] \
-  [--neutral-variant <color>] \
-  [--token <token-name...>] \
-  [--exclude <token-name...>] \
-  [--help]
+```
+material-theme-cli g p [prefix] [color] [options...]
 ```
 
-默认行为：
+### 向后兼容：裸 `[color]`
 
-- `--format css`
-- `--output console`
-- palette 输出默认开启
-- `--palette-tones 0..100`
-- `--variant TONAL_SPOT`
-- `--contrast-level 0`
-- `--spec-version 2025`
-- `--platform phone`
+不带子命令运行时（如 `material-theme-cli "#0f774a"`）等同于 `g c`。这是为了向后兼容。
 
 ## 颜色输入格式
 
-CLI 接受的颜色语法如下：
+CLI 接受以下颜色语法：
 
 | 语法      | 示例                         | 说明                                                                                                       |
 | --------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Hex       | `#0f774a`                    | 支持 `#RGB`、`#RRGGBB`、`#RGBA`、`#RRGGBBAA`。纯数字的十六进制值必须保留前导 `#`，否则可能被当成整数解析。 |
 | RGB       | `rgb(15, 119, 74)`           | 通道可写成 `0-255` 的整数，或 `0%-100%` 的百分比。                                                         |
-| RGBA      | `rgba(15, 119, 74, 1)`       | 只接受完全不透明的 alpha，也就是 `1` 或 `100%`。                                                           |
+| RGBA      | `rgba(15, 119, 74, 1)`       | 只接受完全不透明的 alpha，即 `1` 或 `100%`。                                                               |
 | LAB       | `lab(44.3, -15.2, 18.6)`     | 直接按 LAB 值转换。                                                                                        |
 | HCT       | `hct(270, 75, 50)`           | 适合直接输入 Material 色彩模型参数。                                                                       |
-| ARGB 函数 | `argb(0xff0f774a)`           | 只接受一个 ARGB 整数。                                                                                     |
+| XYZ       | `xyz(0.41, 0.21, 0.05)`      | CIE XYZ（D65 白点），标准化值（通常 0-1）。                                                                |
+| ARGB 函数 | `argb(0xff0f774a)`           | 接受一个 ARGB 整数。                                                                                       |
 | ARGB 整数 | `0xff0f774a` 或 `4278851722` | 支持十进制或 `0x` 前缀形式。                                                                               |
-| 随机颜色  | `random-color`               | 生成一个不透明随机颜色。                                                                                   |
+| 随机颜色  | `random`                     | 生成一个不透明随机颜色。`random-color` 作为向后兼容的别名也被支持。                                        |
 
-如果输入为空或格式不支持，CLI 会直接报错并退出。
+如果输入为空或格式不支持，CLI 会报错退出。
 
-`random-color` 可以用于位置参数、`--input` 文件内容，以及 `--primary`、`--secondary`、`--tertiary`、`--error`、`--neutral`、`--neutral-variant` 这些颜色覆盖参数。
+`random` 可用于位置参数，以及 `--primary`、`--secondary`、`--tertiary`、`--error`、`--neutral`、`--neutral-variant` 这些颜色覆盖选项。
 
-## 命令选项文档
+## 命令选项
 
-### 输入与输出
+### 公共选项（所有命令）
 
-| 选项                              | 默认值              | 说明                                                                                                                                                                                   |
-| --------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[color]`                         | 无                  | 位置参数，直接传入颜色值。                                                                                                                                                             |
-| `--input <file-path>`             | 无                  | 从文件读取源色文本，读取后会去掉首尾空白。路径按当前工作目录解析。                                                                                                                     |
-| `--format <format>`               | `css`               | 输出格式，支持 `css`、`json`、`xml`、`yaml`、`js`、`ts`、`csv`。                                                                                                                       |
-| `--output <target>`               | `console`           | `console` 直接打印到终端；`file` 写入文件。                                                                                                                                            |
-| `--path <output-file-path>`       | `./output.<format>` | 当 `--output file` 时使用。路径按当前工作目录解析。                                                                                                                                    |
-| `--make-js <output-js-file-path>` | 无                  | 生成一个可复用的 ESM 包装脚本。它会把当前 CLI 配置固化进去，并在运行时调用 `dist/index.js`。如果输入里使用了 `random-color`，脚本会在运行时重新随机。它和 `--format js` 不是同一件事。 |
-| `--help`                          | 无                  | 显示帮助信息。                                                                                                                                                                         |
+以下选项适用于 `g c`、`g p`（两种模式）以及裸 `[color]` 形式。
 
-### 主题与配色
+| 选项                                | 默认值    | 说明                                                                                                                                                                                                              |
+| ----------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format <format>`                 | `css`     | 输出格式。支持的值：`css`、`json`、`xml`、`yaml`、`js`、`ts`、`csv`。                                                                                                                                             |
+| `--variant <variant>`               | `neutral` | 动态方案变体。接受数字 `0`–`8` 或命名值：`MONOCHROME`、`NEUTRAL`、`TONAL_SPOT` / `TONALSPOT`、`VIBRANT`、`EXPRESSIVE`、`FIDELITY`、`CONTENT`、`RAINBOW`、`FRUIT_SALAD` / `FRUITSALAD`。大小写不敏感，下划线可选。 |
+| `--contrast-level <contrast-level>` | `0`       | 对比度级别。只接受 `-1`、`0`、`1`。                                                                                                                                                                               |
+| `--spec-version <spec-version>`     | `2025`    | 设计规范版本。接受 `2021`、`2025`、`2026`。`2026` 会被映射到 `2025` 规范。                                                                                                                                        |
+| `--platform <platform>`             | `phone`   | 目标平台。只接受 `phone` 和 `watch`。                                                                                                                                                                             |
+| `--primary <color>`                 | 无        | 覆盖 primary palette 源色。                                                                                                                                                                                       |
+| `--secondary <color>`               | 无        | 覆盖 secondary palette 源色。                                                                                                                                                                                     |
+| `--tertiary <color>`                | 无        | 覆盖 tertiary palette 源色。                                                                                                                                                                                      |
+| `--error <color>`                   | 无        | 覆盖 error palette 源色。                                                                                                                                                                                         |
+| `--neutral <color>`                 | 无        | 覆盖 neutral palette 源色。                                                                                                                                                                                       |
+| `--neutral-variant <color>`         | 无        | 覆盖 neutral-variant palette 源色。                                                                                                                                                                               |
+| `--var-prefix <prefix>`             | auto\*    | CSS 变量/JSON/XML 键名的自定义前缀。默认：颜色用 `md-sys-color-`，palette 用 `md-sys-ref-`。提供时直接替换默认值，**不注入中缀**。在 `g p`（自定义）模式下忽略，前缀来自位置参数。                                |
+| `--help`                            | 无        | 显示帮助信息。                                                                                                                                                                                                    |
 
-| 选项                                | 默认值       | 说明                                                                                                                                                                                                                           |
-| ----------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--variant <variant>`               | `TONAL_SPOT` | 动态方案变体。可用值包括：`0` = `MONOCHROME`，`1` = `NEUTRAL`，`2` = `TONAL_SPOT` / `TONALSPOT`，`3` = `VIBRANT`，`4` = `EXPRESSIVE`，`5` = `FIDELITY`，`6` = `CONTENT`，`7` = `RAINBOW`，`8` = `FRUIT_SALAD` / `FRUITSALAD`。 |
-| `--contrast-level <contrast-level>` | `1`          | 对比度级别，只接受 `-1`、`0`、`1`。                                                                                                                                                                                            |
-| `--spec-version <spec-version>`     | `2025`       | 设计规范版本，只接受 `2021` 或 `2025`。                                                                                                                                                                                        |
-| `--platform <platform>`             | `phone`      | 目标平台，只接受 `phone` 或 `watch`。                                                                                                                                                                                          |
-| `--primary <color>`                 | 无           | 覆盖 primary 配色盘。                                                                                                                                                                                                          |
-| `--secondary <color>`               | 无           | 覆盖 secondary 配色盘。                                                                                                                                                                                                        |
-| `--tertiary <color>`                | 无           | 覆盖 tertiary 配色盘。                                                                                                                                                                                                         |
-| `--error <color>`                   | 无           | 覆盖 error 配色盘。                                                                                                                                                                                                            |
-| `--neutral <color>`                 | 无           | 覆盖 neutral 配色盘。                                                                                                                                                                                                          |
-| `--neutral-variant <color>`         | 无           | 覆盖 neutral-variant 配色盘。                                                                                                                                                                                                  |
-| `--no-palette`                      | 开启         | 关闭 palette 令牌输出，但主题令牌仍会正常输出。                                                                                                                                                                                |
-| `--palette-only`                    | 关闭         | 只输出 palette 令牌，跳过主题令牌。                                                                                                                                                                                            |
-| `--palette-tones <tone-list>`       | `0..100`     | 仅输出指定的 palette tone。支持用逗号或空格分隔的整数，范围是 `0` 到 `100`，例如 `0, 1`。                                                                                                                                      |
+\* 实际默认前缀取决于命令：`g c` 默认 `md-sys-color`，`g p`（主题化）默认 `md-sys-ref`。`g p`（自定义）模式下前缀来自位置参数，`--var-prefix` 被忽略。
 
-这些颜色覆盖参数接受和源色相同的语法，也就是 Hex、RGB、RGBA、LAB、HCT、ARGB 函数和 ARGB 整数。
+这些颜色覆盖选项接受与源色相同的语法：Hex、RGB、RGBA、LAB、HCT、XYZ、ARGB 函数和 ARGB 整数。
 
-### 过滤
+### `g c` — 过滤选项
 
-| 选项                        | 默认值 | 说明                                         |
-| --------------------------- | ------ | -------------------------------------------- |
-| `--token <token-name...>`   | 无     | 白名单，只保留这些 token。支持一次传多个值。 |
-| `--exclude <token-name...>` | 无     | 黑名单，排除这些 token。支持一次传多个值。   |
+| 选项                        | 默认值 | 说明                                                        |
+| --------------------------- | ------ | ----------------------------------------------------------- |
+| `--include <token-name...>` | 无     | 白名单，只保留列出的颜色 token（如 `primary`、`surface`）。 |
+| `--exclude <token-name...>` | 无     | 黑名单，移除列出的颜色 token。                              |
 
 注意事项：
 
-- `--token` 和 `--exclude` 互斥，不能同时使用。
-- 参与匹配的名称会先归一化为 kebab-case，所以 `primaryContainer`、`PRIMARY_CONTAINER`、`primary-container` 会被视为同一个名字。
-- palette 选择器使用 `palette-` 前缀。`palette-primary` 或 `palette-neutral-variant` 会保留整个 family，而 `palette-primary-50` 会只保留单个 tone。
-- palette 选择器可以和 `--palette-only`、`--palette-tones` 搭配使用，把输出限制在指定的 palette token 上。
+- `--include` 和 `--exclude` 互斥，不能同时使用。
+- 名称会先归一化为 kebab-case 再匹配（`primaryContainer` → `primary-container`）。
 - 未识别的名称会发出警告，然后被忽略。
 
-## 使用案例
+### `g p`（主题化）— 过滤选项
 
-### 1. 终端预览，默认输出 CSS
+| 选项                        | 默认值   | 说明                                                                                                                                               |
+| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--include <token-name...>` | 无       | 只保留这些 palette family 或具体 tone（如 `primary`、`secondary-50`）。                                                                            |
+| `--exclude <token-name...>` | 无       | 移除这些 palette family 或具体 tone。与 `--include` 互斥。                                                                                         |
+| `--tones <tone-list>`       | `0..100` | 逗号或空格分隔的整数 tone（如 `0, 10, 50, 100`），范围 `0`–`100`。限制全部 6 个 family 只输出这些 tone。`--palette-tones` 作为已弃用的别名被接受。 |
+
+### `g p`（自定义）— 过滤选项
+
+| 选项                        | 默认值   | 说明                                                                                                             |
+| --------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `--include <token-name...>` | 无       | 只保留这些 tone（接受裸数字 `10` 或可提取数字的 token 名 `my-prefix-10`）。                                      |
+| `--exclude <token-name...>` | 无       | 移除这些 tone。与 `--include` 互斥。                                                                             |
+| `--tones <tone-list>`       | `0..100` | 逗号或空格分隔的整数 tone（如 `0, 10, 50, 100`）。控制默认 tone 集合。`--palette-tones` 作为已弃用的别名被接受。 |
+
+对于自定义 palette，`--include` 和 `--exclude` 从 token 名中提取数字 tone。裸数字如 `10` 也被接受。`--include` 非空时覆盖 `--tones` 的选择。
+
+## 示例
+
+### 生成颜色 (`g c`)
 
 ```bash
+# 默认 CSS 输出
+material-theme-cli g c "#0f774a"
+
+# JSON 输出
+material-theme-cli g c "#0f774a" --format json
+
+# 仅显示 primary 和 error 的 token
+material-theme-cli g c "#0f774a" --include primary error
+
+# 排除 surface 相关 token
+material-theme-cli g c "#0f774a" --exclude surface surface-dim surface-bright
+
+# 自定义 variant 和对比度
+material-theme-cli g c "#0f774a" --variant FRUIT_SALAD --contrast-level 1
+
+# 自定义 CSS 变量前缀
+material-theme-cli g c "#0f774a" --var-prefix my-app
+
+# 覆盖单个 palette 源色
+material-theme-cli g c "#0f774a" --primary "#1d4ed8" --secondary "#14b8a6"
+```
+
+### 生成主题化 Palettes (`g p [color]`)
+
+```bash
+# 默认：6 个 family × 101 个 tone = 606 个 token（CSS）
+material-theme-cli g p "#0f774a"
+
+# JSON 输出 + 选定 tone
+material-theme-cli g p "#0f774a" --format json --tones "0, 10, 50, 100"
+
+# 仅限特定 family
+material-theme-cli g p "#0f774a" --include primary secondary
+
+# 排除 neutral 相关 family
+material-theme-cli g p "#0f774a" --exclude neutral neutral-variant
+
+# 自定义前缀
+material-theme-cli g p "#0f774a" --var-prefix my-theme
+```
+
+### 生成自定义 Palette (`g p [prefix] [color]`)
+
+```bash
+# 单个自定义 palette，全部 101 个 tone
+material-theme-cli g p my-brand "#0f774a"
+
+# 指定 tone
+material-theme-cli g p my-brand "#0f774a" --tones "0, 50, 100"
+
+# 仅保留指定 tone
+material-theme-cli g p my-brand "#0f774a" --include "10" --include "50"
+
+# 排除指定 tone
+material-theme-cli g p my-brand "#0f774a" --exclude my-brand-0 --exclude my-brand-100
+```
+
+### 向后兼容（裸 `[color]`）
+
+```bash
+# 等同于 `g c`
 material-theme-cli "#0f774a"
+material-theme-cli random
+material-theme-cli "#0f774a" --format json --include primary
 ```
 
-### 2. 输出 CSS 文件
+## 输出协议
+
+CLI 将所有输出发送到 stdout（终端）。如需保存到文件，使用 Shell 重定向：
 
 ```bash
-material-theme-cli "#0f774a" --format css --output file --path ./theme.css
+material-theme-cli g c "#0f774a" --format json > theme.json
 ```
 
-### 3. 输出 JSON 文件
+### 格式详情
 
-```bash
-material-theme-cli "#0f774a" --format json --output file --path ./theme.json
-```
+- **CSS**：输出 `:root { ... }`，包含 `--{prefix}-*` 自定义属性，值使用 `light-dark(light, dark)`。默认前缀：颜色 token 用 `--md-sys-color-`，palette token 用 `--md-sys-ref-`。自定义 `--var-prefix` 直接替换默认值（无中缀注入）。
+- **JSON** / **YAML**：颜色输出包含顶层 `light`、`dark`、`scheme` 对象。Palette 输出含顶层 `palette` 对象。
+- **XML**：输出 `<?xml?>` 和 `<resources>`，包含 `<color>` 节点。颜色名使用 `_light` / `_dark` 后缀。
+- **JS** / **TS**：输出 ESM `export const` 声明，使用 `PascalCase` + `Light`/`Dark`/`Scheme` 后缀。
+- **CSV**：表头 `scheme,token-name,color-value`。颜色 token 每个产生 3 行（light/dark/scheme），palette token 每个产生 1 行（palette）。
 
-### 4. 从文件读取颜色
-
-```bash
-material-theme-cli --input ./color.txt --format yaml --output file --path ./theme.yaml
-```
-
-### 5. 生成 TypeScript 模块
-
-`js` 和 `ts` 的序列化内容一致，都会生成 `export const MdSysColor = { ... }` 这种模块源码。
-
-```bash
-material-theme-cli "#0f774a" --format ts --output file --path ./theme.ts
-```
-
-### 6. 使用 token 白名单
-
-```bash
-material-theme-cli "#0f774a" --token primary surface-tint on-primary
-```
-
-### 7. 使用 token 黑名单
-
-```bash
-material-theme-cli "#0f774a" --exclude surface-tint outline shadow
-```
-
-### 8. 覆盖配色盘
-
-```bash
-material-theme-cli "#0f774a" --primary "#1d4ed8" --secondary "#14b8a6" --neutral "#111827"
-```
-
-### 9. 调整方案、对比度和平台
-
-```bash
-material-theme-cli "#0f774a" --variant FRUIT_SALAD --contrast-level 0 --spec-version 2025 --platform watch
-```
-
-### 10. 生成可复用脚本
-
-```bash
-material-theme-cli "#0f774a" --make-js ./scripts/theme-generator.js --format css --output file --path ./theme.css
-```
-
-`--make-js` 会生成一个运行时脚本，把当前参数固化进去。该脚本依赖构建产物 `dist/index.js`，因此要在仓库构建完成后再执行它。
-
-### 11. 跳过 palette 输出
-
-```bash
-material-theme-cli "#0f774a" --no-palette
-```
-
-### 12. 限定 palette tone
-
-```bash
-material-theme-cli "#0f774a" --palette-tones "0, 1"
-```
-
-### 13. 只保留一个 palette tone
-
-```bash
-material-theme-cli "#0f774a" --palette-only --token palette-primary-50
-```
-
-## 协议说明
-
-### 输出协议
-
-CLI 内部会先生成一组 `lightObject` 和 `darkObject`，再把它们序列化成不同格式。为了保证输出稳定，键会先归一化为 kebab-case，再按字母顺序排序。
-
-- `css`：输出 `:root` 和 `--md-sys-color-*` 自定义属性，值使用 `light-dark(light, dark)`。
-- `json` / `yaml`：输出包含 `light`、`dark`、`scheme` 三个顶层节点的主题对象。
-- `xml`：输出 `resources` 节点，颜色名使用 `md_sys_color_*_light` 和 `md_sys_color_*_dark`。
-- `js` / `ts`：输出 `export const MdSysColor = { ... }` 模块源码，`Light`、`Dark`、`Scheme` 后缀分别表示浅色、深色和组合值。
-- `csv`：表头固定为 `scheme,token-name,color-value`，每个 token 会展开为三行，分别对应 `light`、`dark` 和 `scheme`。
-
-palette 输出默认会和主题输出一起生成。
-
-- `css`：额外输出 `--md-sys-palette-*` 自定义属性，值是固定的十六进制颜色，不使用 `light-dark()`。
-- `json` / `yaml`：额外输出顶层 `palette` 节点，使用 `md-sys-palette-*` 键。
-- `xml`：在 `resources` 下额外输出 `md_sys_palette_*` 颜色节点。
-- `js` / `ts`：额外输出 `export const MdSysPalette = { ... }` 模块对象，值是固定 palette 颜色。
-- `csv`：额外输出 `palette` 行，记录每个 palette tone。
-
-如果 `light` 和 `dark` 的归一化键不一致，序列化会失败，这能避免生成不完整的主题文件。
+键会归一化为 kebab-case（CSS、JSON）、snake_case（XML）或 PascalCase（JS/TS），并按字母排序以保证确定性输出。
 
 ### 开源协议
 

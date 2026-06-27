@@ -5,23 +5,21 @@ import {
 	argbFromHex,
 	argbFromLab,
 	argbFromRgb,
+	argbFromXyz,
 	type Platform,
 } from "@material/material-color-utilities";
 import { Command } from "commander";
 import { randomInt } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MakeJsService } from "./services/make-js.service";
 import { MaterialColorService, type MaterialColorKebabCaseName } from "./services/material-color.service";
-import { SerializationService, type PaletteSelector, type SerializationFormat } from "./services/serialization.service";
+import { SerializationService, type SerializationFormat } from "./services/serialization.service";
 import { StringUtil } from "./utils/string-util";
 
 export { MaterialColorService } from "./services/material-color.service";
 export { SerializationService } from "./services/serialization.service";
 
-type CliOutputTarget = "console" | "file";
-type CliSpecVersion = "2021" | "2025";
+type CliSpecVersion = "2021" | "2025" | "2026";
 type CliColorInput = {
 	color: Hct;
 	expression: string;
@@ -39,8 +37,7 @@ type CliPaletteOverrides = Partial<Record<CliPaletteOverrideKey, TonalPalette>>;
 type CliPaletteExpressions = Partial<Record<CliPaletteOverrideKey, string>>;
 
 type CliFilterSplit = {
-	themeNames: MaterialColorKebabCaseName[];
-	paletteSelectors: PaletteSelector[];
+	names: MaterialColorKebabCaseName[];
 	unknownNames: string[];
 };
 
@@ -52,14 +49,9 @@ type ResolvedPaletteOverrides = {
 
 type ParsedCommandOptions = {
 	format: SerializationFormat;
-	output: CliOutputTarget;
-	path?: string;
-	makeJs?: string;
-	input?: string;
-	token?: string[];
+	include?: string[];
 	exclude?: string[];
-	palette?: boolean;
-	paletteOnly?: boolean;
+	tones?: number[];
 	paletteTones?: number[];
 	variant: Variant;
 	contrastLevel: -1 | 0 | 1;
@@ -71,9 +63,10 @@ type ParsedCommandOptions = {
 	error?: string;
 	neutral?: string;
 	neutralVariant?: string;
+	varPrefix?: string;
 };
 
-const RandomColorLiteral = "random-color";
+const RandomColorLiteral = "random";
 const RandomColorRuntimeExpression = "createRandomColor()";
 
 const VariantAliases = new Map<string, Variant>([
@@ -113,11 +106,6 @@ const FormatAliases = new Map<string, SerializationFormat>([
 	["JS", "js"],
 	["TS", "ts"],
 	["CSV", "csv"],
-]);
-
-const OutputAliases = new Map<string, CliOutputTarget>([
-	["CONSOLE", "console"],
-	["FILE", "file"],
 ]);
 
 const PaletteOptionMap = [
@@ -166,6 +154,10 @@ export function parseColorInput(colorValue: string): Hct {
 			return parseHctInput(argumentsList, trimmedValue);
 		}
 
+		if (functionName === "xyz") {
+			return parseXyzInput(argumentsList, trimmedValue);
+		}
+
 		if (functionName === "rgb" || functionName === "rgba") {
 			return parseRgbInput(argumentsList, trimmedValue);
 		}
@@ -179,7 +171,7 @@ export function parseColorInput(colorValue: string): Hct {
 		}
 
 		throw new Error(
-			`material-theme-cli: unsupported color function "${functionMatch[1]}". Expected hct(), rgb(), rgba(), lab(), or argb().`,
+			`material-theme-cli: unsupported color function "${functionMatch[1]}". Expected hct(), xyz(), rgb(), rgba(), lab(), or argb().`,
 		);
 	}
 
@@ -192,7 +184,7 @@ export function parseColorInput(colorValue: string): Hct {
 	}
 
 	throw new Error(
-		`material-theme-cli: unsupported color value "${colorValue}". Expected random-color, hct(...), hex, argb(...), rgb(...), or lab(...).`,
+		`material-theme-cli: unsupported color value "${colorValue}". Expected random, hct(...), xyz(...), hex, argb(...), rgb(...), or lab(...).`,
 	);
 }
 
@@ -270,17 +262,6 @@ export function parsePaletteToneListOption(value: string): number[] {
 	return [...new Set(tones)].sort((left, right) => left - right);
 }
 
-export function parseOutputTargetOption(value: string): CliOutputTarget {
-	const normalizedValue = value.trim().toUpperCase();
-	const output = OutputAliases.get(normalizedValue) ?? (normalizedValue.toLowerCase() as CliOutputTarget);
-
-	if (output !== "console" && output !== "file") {
-		throw new Error('material-theme-cli: unsupported output target "' + value + '". Expected console or file.');
-	}
-
-	return output;
-}
-
 export function parseContrastLevelOption(value: string): -1 | 0 | 1 {
 	const trimmedValue = value.trim();
 
@@ -300,11 +281,11 @@ export function parseContrastLevelOption(value: string): -1 | 0 | 1 {
 export function parseSpecVersionOption(value: string): CliSpecVersion {
 	const trimmedValue = value.trim();
 
-	if (trimmedValue !== "2021" && trimmedValue !== "2025") {
-		throw new Error(`material-theme-cli: unsupported spec version "${value}". Expected 2021 or 2025.`);
+	if (trimmedValue !== "2021" && trimmedValue !== "2025" && trimmedValue !== "2026") {
+		throw new Error(`material-theme-cli: unsupported spec version "${value}". Expected 2021, 2025, or 2026.`);
 	}
 
-	return trimmedValue;
+	return trimmedValue as CliSpecVersion;
 }
 
 function createCommand() {
@@ -312,19 +293,82 @@ function createCommand() {
 
 	command
 		.name("material-theme-cli")
-		.description("Generate Material Design theme and palette tokens from HCT, hex, ARGB, RGB, LAB, or random-color values.")
-		.argument("[color]", "source color value or random-color")
-		.option("--input <file-path>", "read the source color value from a file")
+		.description("Generate Material Design theme and palette tokens from HCT, hex, ARGB, RGB, LAB, or random values.")
+		.argument("[color]", "source color value or random")
+		.action(async (colorValue: string | undefined) => {
+			await executeCommand(colorValue, {});
+		});
+
+	// g subcommand (generate)
+	const gCommand = command.command("g")
+		.description("generate theme tokens");
+
+	// g c subcommand (generate colors)
+	addColorOptions(
+		gCommand.command("c")
+			.description("generate color tokens")
+			.argument("[color]", "source color value or random"),
+	).action(async (colorValue: string | undefined, options: ParsedCommandOptions) => {
+		await executeCommand(colorValue, options);
+	});
+
+	// g p subcommand (generate palettes)
+	addPaletteOptions(
+		gCommand.command("p")
+			.description("generate palette tokens")
+			.argument("[args...]", "var-prefix and color, or just color"),
+	).action(async (args: string[] | undefined, options: ParsedCommandOptions) => {
+		const flatArgs = args ?? [];
+		await executePaletteCommand(flatArgs, options);
+	});
+
+	return command;
+}
+
+function getDefaultOptions(): ParsedCommandOptions {
+	return {
+		format: "css",
+		variant: Variant.NEUTRAL,
+		contrastLevel: 0,
+		specVersion: "2025",
+		platform: "phone",
+	} as ParsedCommandOptions;
+}
+
+function mergeOptions(partial: Partial<ParsedCommandOptions>): ParsedCommandOptions {
+	const { tones, paletteTones, ...rest } = partial;
+	// --tones is the canonical option; --palette-tones is a deprecated alias.
+	// --tones takes precedence when both are supplied.
+	const resolvedTones = tones ?? paletteTones;
+	return {
+		...getDefaultOptions(),
+		...rest,
+		...(resolvedTones !== undefined ? { paletteTones: resolvedTones } : {}),
+	};
+}
+
+/**
+ * Enforces the design-spec invariant that --include and --exclude are mutually
+ * exclusive. When both are supplied with at least one value each, the CLI must
+ * report an error and exit with a non-zero status code.
+ */
+function ensureIncludeExcludeMutuallyExclusive(options: ParsedCommandOptions) {
+	const hasInclude = options.include !== undefined && options.include.length > 0;
+	const hasExclude = options.exclude !== undefined && options.exclude.length > 0;
+
+	if (hasInclude && hasExclude) {
+		throw new Error(
+			"material-theme-cli: --include and --exclude are mutually exclusive. Provide only one of them.",
+		);
+	}
+}
+
+function addColorOptions(cmd: Command) {
+	return cmd
 		.option("--format <format>", "serialization format", parseFormatOption, "css")
-		.option("--output <target>", "output target", parseOutputTargetOption, "console")
-		.option("--path <output-file-path>", "file path used when output is set to file")
-		.option("--make-js <output-js-file-path>", "shortcut for --format js --output file")
-		.option("--no-palette", "skip palette output")
-		.option("--palette-only", "emit palette tokens only")
-		.option("--palette-tones <tone-list>", "palette tones to generate, such as 0,1,2", parsePaletteToneListOption)
-		.option("--token <token-name...>", "token names to keep")
+		.option("--include <token-name...>", "token names to keep")
 		.option("--exclude <token-name...>", "token names to exclude")
-		.option("--variant <variant>", "dynamic scheme variant", parseVariantOption, Variant.TONAL_SPOT)
+		.option("--variant <variant>", "dynamic scheme variant", parseVariantOption, Variant.NEUTRAL)
 		.option("--contrast-level <contrast-level>", "contrast level", parseContrastLevelOption, 0)
 		.option("--spec-version <spec-version>", "design spec version", parseSpecVersionOption, "2025")
 		.option("--platform <platform>", "target platform", parsePlatformOption, "phone")
@@ -334,114 +378,217 @@ function createCommand() {
 		.option("--error <color>", "override the error palette")
 		.option("--neutral <color>", "override the neutral palette")
 		.option("--neutral-variant <color>", "override the neutral-variant palette")
-		.action(async (colorValue: string | undefined, options: ParsedCommandOptions) => {
-			await executeCommand(command, colorValue, options);
-		});
-
-	return command;
+		.option("--var-prefix <prefix>", "custom CSS/key variable prefix");
 }
 
-async function executeCommand(command: Command, colorValue: string | undefined, options: ParsedCommandOptions) {
-	const sourceColorValue = await resolveSourceColorValue(colorValue, options.input, command);
+function addPaletteOptions(cmd: Command) {
+	return cmd
+		.option("--format <format>", "serialization format", parseFormatOption, "css")
+		.option("--include <token-name...>", "palette families/tokens to keep (e.g. primary, secondary-50)")
+		.option("--exclude <token-name...>", "palette families/tokens to exclude")
+		.option("--tones <tone-list>", "palette tones to generate, such as 0,1,2", parsePaletteToneListOption)
+		.option("--palette-tones <tone-list>", "alias of --tones (deprecated)", parsePaletteToneListOption)
+		.option("--variant <variant>", "dynamic scheme variant", parseVariantOption, Variant.NEUTRAL)
+		.option("--contrast-level <contrast-level>", "contrast level", parseContrastLevelOption, 0)
+		.option("--spec-version <spec-version>", "design spec version", parseSpecVersionOption, "2025")
+		.option("--platform <platform>", "target platform", parsePlatformOption, "phone")
+		.option("--primary <color>", "override the primary palette")
+		.option("--secondary <color>", "override the secondary palette")
+		.option("--tertiary <color>", "override the tertiary palette")
+		.option("--error <color>", "override the error palette")
+		.option("--neutral <color>", "override the neutral palette")
+		.option("--neutral-variant <color>", "override the neutral-variant palette")
+		.option("--var-prefix <prefix>", "custom CSS/key variable prefix");
+}
 
-	if (!sourceColorValue) {
-		return;
-	}
-
+async function executeCommand(colorValue: string | undefined, options: Partial<ParsedCommandOptions>) {
+	const merged = mergeOptions(options);
+	ensureIncludeExcludeMutuallyExclusive(merged);
+	const sourceColorValue = colorValue ?? "random";
 	const sourceColorInput = resolveColorInput(sourceColorValue);
-	const palettes = buildPaletteOverrides(options);
-	const tokenFilters = splitFilterNames(options.token);
-	const excludeFilters = splitFilterNames(options.exclude);
-	const includePalette = options.palette !== false;
-	const includeTheme = options.paletteOnly !== true;
-	const paletteTones = options.paletteTones;
+	const palettes = buildPaletteOverrides(merged);
+	const includeFilters = splitFilterNames(merged.include);
+	const excludeFilters = splitFilterNames(merged.exclude);
 
-	if (!includeTheme && !includePalette) {
-		throw new Error("material-theme-cli: --palette-only cannot be used with --no-palette.");
-	}
-
-	if (!includePalette && (paletteTones !== undefined || tokenFilters.paletteSelectors.length > 0 || excludeFilters.paletteSelectors.length > 0)) {
-		throw new Error("material-theme-cli: palette selectors require palette output.");
-	}
-
-	if (tokenFilters.unknownNames.length > 0) {
-		console.warn(`material-theme-cli: unknown token names ignored: ${tokenFilters.unknownNames.join(", ")}`);
+	if (includeFilters.unknownNames.length > 0) {
+		console.warn(`material-theme-cli: unknown include names ignored: ${includeFilters.unknownNames.join(", ")}`);
 	}
 
 	if (excludeFilters.unknownNames.length > 0) {
 		console.warn(`material-theme-cli: unknown exclude names ignored: ${excludeFilters.unknownNames.join(", ")}`);
 	}
 
-	if (options.makeJs) {
-		const generatedScript = MakeJsService.create({
-			outputPath: options.makeJs,
-			sourceColorExpression: sourceColorInput.expression,
-			variant: options.variant,
-			contrastLevel: options.contrastLevel,
-			specVersion: options.specVersion,
-			platform: options.platform,
-			palettes: palettes.paletteExpressions,
-			themeWhiteList: tokenFilters.themeNames,
-			themeBlackList: excludeFilters.themeNames,
-			paletteWhiteList: tokenFilters.paletteSelectors,
-			paletteBlackList: excludeFilters.paletteSelectors,
-			includePalette,
-			paletteOnly: !includeTheme,
-			paletteTones,
-			format: options.format,
-			output: options.output,
-			path: options.path,
-			usesRandomColor: sourceColorInput.usesRandomColor || palettes.usesRandomColor,
-		});
+	const theme = MaterialColorService.create({
+		sourceColor: sourceColorInput.color,
+		variant: merged.variant,
+		contrast: merged.contrastLevel,
+		specVersion: merged.specVersion === "2026" ? "2025" : merged.specVersion,
+		platform: merged.platform,
+		palettes: palettes.palettes,
+		whiteList: includeFilters.names.length > 0 ? includeFilters.names : undefined,
+		blackList: excludeFilters.names.length > 0 ? excludeFilters.names : undefined,
+	});
 
-		await writeFile(options.makeJs, generatedScript, "utf8");
-		return;
+	const serializedTheme = SerializationService.serialize({
+		lightObject: theme.lightObject,
+		darkObject: theme.darkObject,
+		format: merged.format,
+		varPrefix: merged.varPrefix,
+	});
+
+	process.stdout.write(serializedTheme);
+}
+
+async function executePaletteCommand(args: string[], options: Partial<ParsedCommandOptions>) {
+	const merged = mergeOptions(options);
+	ensureIncludeExcludeMutuallyExclusive(merged);
+	// Two modes:
+	//   g p [color]          — themed palettes (all theme palettes)
+	//   g p [prefix] [color] — custom palette with given prefix
+	if (args.length >= 2) {
+		await executeCustomPalette(args[0], args[1], merged);
+	} else {
+		const colorValue = args.length === 1 ? args[0] : "random";
+		await executeThemedPalettes(colorValue, merged);
 	}
+}
+
+async function executeCustomPalette(prefix: string, colorValue: string, options: ParsedCommandOptions) {
+	const sourceColorInput = resolveColorInput(colorValue);
+	const tonalPalette = TonalPalette.fromHct(sourceColorInput.color);
+	const palettes = { primaryPalette: tonalPalette };
+	let paletteTones = options.paletteTones;
+
+	// Apply --include / --exclude tone filtering for custom palettes.
+	// Values are normalized to kebab-case, then the last numeric segment
+	// (if present) is extracted as a tone number.
+	if (options.include !== undefined && options.include.length > 0) {
+		const tones = parseCustomPaletteToneFilters(options.include, prefix);
+		if (tones !== undefined) {
+			paletteTones = tones;
+		}
+	} else if (options.exclude !== undefined && options.exclude.length > 0) {
+		const excludeTones = parseCustomPaletteToneFilters(options.exclude, prefix);
+		if (excludeTones !== undefined && excludeTones.length > 0) {
+			const defaultTones = paletteTones ?? Array.from({ length: 101 }, (_, i) => i);
+			const excludeSet = new Set(excludeTones);
+			paletteTones = defaultTones.filter((t) => !excludeSet.has(t));
+		}
+	}
+
+	const serialized = SerializationService.serialize({
+		lightObject: {},
+		darkObject: {},
+		palettes,
+		paletteTones,
+		format: options.format,
+		varPrefix: prefix,
+		customPaletteName: "",
+		isCustomPalette: true,
+		includeTheme: false,
+	});
+
+	process.stdout.write(serialized);
+}
+
+/**
+ * Extract tone numbers from --include / --exclude values for a custom palette.
+ *
+ * Each value is normalized to kebab-case and the last numeric segment is
+ * treated as a tone.  Values like `"10"`, `"my-color-10"`, or `"My Color 10"`
+ * all resolve to tone 10.  Non-numeric segments are silently ignored (they
+ * have no meaning for custom single-family palettes).
+ */
+function parseCustomPaletteToneFilters(values: string[], _prefix: string): number[] | undefined {
+	const tones = new Set<number>();
+
+	for (const raw of normalizeColorNameList(values)) {
+		const normalized = StringUtil.toKebabCase(raw);
+		if (normalized.length === 0) {
+			continue;
+		}
+
+		// Try the whole string first (plain numbers like "10")
+		const wholeAsNumber = Number(normalized);
+		if (Number.isInteger(wholeAsNumber) && /^\d+$/.test(normalized)) {
+			if (wholeAsNumber >= 0 && wholeAsNumber <= 100) {
+				tones.add(wholeAsNumber);
+			}
+			continue;
+		}
+
+		// Otherwise extract the last hyphen-separated segment
+		const parts = normalized.split("-");
+		const lastPart = parts[parts.length - 1];
+		if (/^\d+$/.test(lastPart)) {
+			const tone = Number(lastPart);
+			if (tone >= 0 && tone <= 100) {
+				tones.add(tone);
+			}
+		}
+	}
+
+	return tones.size > 0 ? [...tones].sort((a, b) => a - b) : undefined;
+}
+
+async function executeThemedPalettes(colorValue: string, options: ParsedCommandOptions) {
+	const sourceColorInput = resolveColorInput(colorValue);
+	const palettes = buildPaletteOverrides(options);
+	const paletteSelectors = splitPaletteSelectors(options.include ?? []);
+	const paletteExcludeSelectors = splitPaletteSelectors(options.exclude ?? []);
+	const paletteTones = options.paletteTones;
 
 	const theme = MaterialColorService.create({
 		sourceColor: sourceColorInput.color,
 		variant: options.variant,
 		contrast: options.contrastLevel,
-		specVersion: options.specVersion,
+		specVersion: options.specVersion === "2026" ? "2025" : options.specVersion,
 		platform: options.platform,
 		palettes: palettes.palettes,
-		...(tokenFilters.themeNames.length > 0 ? { whiteList: tokenFilters.themeNames } : {}),
-		...(excludeFilters.themeNames.length > 0 ? { blackList: excludeFilters.themeNames } : {}),
 	});
 
-	const serializedTheme = SerializationService.serialize({
-		lightObject: includeTheme ? theme.lightObject : {},
-		darkObject: includeTheme ? theme.darkObject : {},
-		palettes: includePalette ? theme.palettes : undefined,
-		paletteWhiteList: tokenFilters.paletteSelectors.length > 0 ? tokenFilters.paletteSelectors : undefined,
-		paletteBlackList: excludeFilters.paletteSelectors.length > 0 ? excludeFilters.paletteSelectors : undefined,
-		includeTheme,
+	const serialized = SerializationService.serialize({
+		lightObject: theme.lightObject,
+		darkObject: theme.darkObject,
+		palettes: theme.palettes,
 		paletteTones,
+		paletteWhiteList: paletteSelectors.length > 0 ? paletteSelectors : undefined,
+		paletteBlackList: paletteExcludeSelectors.length > 0 ? paletteExcludeSelectors : undefined,
 		format: options.format,
+		varPrefix: options.varPrefix,
+		includeTheme: false,
 	});
 
-	if (options.output === "file") {
-		const outputPath = resolveOutputPath(options.path, undefined, options.format);
-		await mkdir(dirname(outputPath), { recursive: true });
-		await writeFile(outputPath, serializedTheme, "utf8");
-		return;
-	}
-
-	process.stdout.write(serializedTheme);
+	process.stdout.write(serialized);
 }
 
-async function resolveSourceColorValue(colorValue: string | undefined, inputPath: string | undefined, command: Command) {
-	if (inputPath) {
-		const filePath = resolve(process.cwd(), inputPath);
-		return (await readFile(filePath, "utf8")).trim();
+function splitPaletteSelectors(values: string[]) {
+	const selectors: import("./services/serialization.service").PaletteSelector[] = [];
+	const seen = new Set<string>();
+
+	for (const value of normalizeColorNameList(values)) {
+		const trimmed = value.trim();
+		if (trimmed.length === 0 || seen.has(trimmed)) {
+			continue;
+		}
+		seen.add(trimmed);
+
+		const parts = trimmed.split("-");
+		// The last part may be a tone number
+		const lastPart = parts[parts.length - 1];
+		const tone = /^\d+$/.test(lastPart) ? Number(lastPart) : undefined;
+
+		if (tone !== undefined) {
+			const family = parts.slice(0, -1).join("-");
+			if (family.length > 0) {
+				selectors.push({ family: family as import("./services/serialization.service").PaletteSelectorFamilyName, tone });
+			}
+		} else {
+			selectors.push({ family: trimmed as import("./services/serialization.service").PaletteSelectorFamilyName });
+		}
 	}
 
-	if (colorValue) {
-		return colorValue;
-	}
-
-	command.outputHelp();
-	return undefined;
+	return selectors;
 }
 
 function buildPaletteOverrides(options: ParsedCommandOptions): ResolvedPaletteOverrides {
@@ -465,18 +612,6 @@ function buildPaletteOverrides(options: ParsedCommandOptions): ResolvedPaletteOv
 	return { palettes, paletteExpressions, usesRandomColor };
 }
 
-function resolveOutputPath(pathOption: string | undefined, makeJsPath: string | undefined, format: SerializationFormat) {
-	if (makeJsPath) {
-		return resolve(process.cwd(), makeJsPath);
-	}
-
-	if (pathOption) {
-		return resolve(process.cwd(), pathOption);
-	}
-
-	return resolve(process.cwd(), `./output.${format}`);
-}
-
 function normalizeColorNameList(values?: string[]) {
 	return (values ?? [])
 		.map((value) => value.trim())
@@ -484,66 +619,22 @@ function normalizeColorNameList(values?: string[]) {
 }
 
 function splitFilterNames(values?: string[]): CliFilterSplit {
-	const themeNames: MaterialColorKebabCaseName[] = [];
-	const paletteSelectors: PaletteSelector[] = [];
+	const names: MaterialColorKebabCaseName[] = [];
 	const unknownNames: string[] = [];
-	const seenThemeNames = new Set<string>();
-	const seenPaletteSelectors = new Set<string>();
+	const seen = new Set<string>();
 
 	for (const value of normalizeColorNameList(values)) {
 		const normalizedValue = StringUtil.toKebabCase(value);
 
-		if (normalizedValue.length === 0) {
+		if (normalizedValue.length === 0 || seen.has(normalizedValue)) {
 			continue;
 		}
 
-		if (normalizedValue.startsWith("palette-")) {
-			const paletteSelector = parsePaletteSelector(normalizedValue);
-
-			if (paletteSelector === undefined) {
-				unknownNames.push(normalizedValue);
-				continue;
-			}
-
-			const paletteSelectorKey = `${paletteSelector.family}-${paletteSelector.tone ?? ""}`;
-
-			if (!seenPaletteSelectors.has(paletteSelectorKey)) {
-				seenPaletteSelectors.add(paletteSelectorKey);
-				paletteSelectors.push(paletteSelector);
-			}
-
-			continue;
-		}
-
-		if (!seenThemeNames.has(normalizedValue)) {
-			seenThemeNames.add(normalizedValue);
-			themeNames.push(normalizedValue as MaterialColorKebabCaseName);
-		}
+		seen.add(normalizedValue);
+		names.push(normalizedValue as MaterialColorKebabCaseName);
 	}
 
-	return { themeNames, paletteSelectors, unknownNames };
-}
-
-function parsePaletteSelector(value: string): PaletteSelector | undefined {
-	const normalizedValue = value.replace(/^palette-/u, "");
-	const match = normalizedValue.match(/^(primary|secondary|tertiary|error|neutral|neutral-variant)(?:-(\d{1,3}))?$/u);
-
-	if (match === null) {
-		return undefined;
-	}
-
-	if (match[2] === undefined) {
-		return { family: match[1] as PaletteSelector["family"] };
-	}
-
-	if (!/^(?:100|[1-9]?\d)$/u.test(match[2])) {
-		return undefined;
-	}
-
-	return {
-		family: match[1] as PaletteSelector["family"],
-		tone: parsePaletteToneValue(match[2]),
-	};
+	return { names, unknownNames };
 }
 
 function parsePaletteToneValue(value: string) {
@@ -578,6 +669,20 @@ function parseHctInput(argumentsList: string[], originalValue: string) {
 		parseFiniteNumber(argumentsList[0], `${originalValue} hue`),
 		parseFiniteNumber(argumentsList[1], `${originalValue} chroma`),
 		parseFiniteNumber(argumentsList[2], `${originalValue} tone`),
+	);
+}
+
+function parseXyzInput(argumentsList: string[], originalValue: string) {
+	if (argumentsList.length !== 3) {
+		throw new Error(`material-theme-cli: ${originalValue} must contain 3 XYZ values: xyz(x, y, z).`);
+	}
+
+	return Hct.fromInt(
+		argbFromXyz(
+			parseFiniteNumber(argumentsList[0], `${originalValue} x`),
+			parseFiniteNumber(argumentsList[1], `${originalValue} y`),
+			parseFiniteNumber(argumentsList[2], `${originalValue} z`),
+		),
 	);
 }
 
@@ -657,6 +762,10 @@ function renderColorExpression(colorValue: string) {
 			return renderHctExpression(argumentsList, trimmedValue);
 		}
 
+		if (functionName === "xyz") {
+			return renderXyzExpression(argumentsList, trimmedValue);
+		}
+
 		if (functionName === "rgb" || functionName === "rgba") {
 			return renderRgbExpression(argumentsList, trimmedValue);
 		}
@@ -670,7 +779,7 @@ function renderColorExpression(colorValue: string) {
 		}
 
 		throw new Error(
-			`material-theme-cli: unsupported color function "${functionMatch[1]}". Expected hct(), rgb(), rgba(), lab(), or argb().`,
+			`material-theme-cli: unsupported color function "${functionMatch[1]}". Expected hct(), xyz(), rgb(), rgba(), lab(), or argb().`,
 		);
 	}
 
@@ -683,7 +792,7 @@ function renderColorExpression(colorValue: string) {
 	}
 
 	throw new Error(
-		`material-theme-cli: unsupported color value "${colorValue}". Expected random-color, hct(...), hex, argb(...), rgb(...), or lab(...).`,
+		`material-theme-cli: unsupported color value "${colorValue}". Expected random, hct(...), xyz(...), hex, argb(...), rgb(...), or lab(...).`,
 	);
 }
 
@@ -693,6 +802,14 @@ function renderHctExpression(argumentsList: string[], originalValue: string) {
 	}
 
 	return `Hct.from(${parseFiniteNumber(argumentsList[0], `${originalValue} hue`)}, ${parseFiniteNumber(argumentsList[1], `${originalValue} chroma`)}, ${parseFiniteNumber(argumentsList[2], `${originalValue} tone`)})`;
+}
+
+function renderXyzExpression(argumentsList: string[], originalValue: string) {
+	if (argumentsList.length !== 3) {
+		throw new Error(`material-theme-cli: ${originalValue} must contain 3 XYZ values: xyz(x, y, z).`);
+	}
+
+	return `Hct.fromInt(argbFromXyz(${parseFiniteNumber(argumentsList[0], `${originalValue} x`)}, ${parseFiniteNumber(argumentsList[1], `${originalValue} y`)}, ${parseFiniteNumber(argumentsList[2], `${originalValue} z`)}))`;
 }
 
 function renderRgbExpression(argumentsList: string[], originalValue: string) {
@@ -740,7 +857,8 @@ function resolveColorInput(colorValue: string): CliColorInput {
 }
 
 function isRandomColorLiteral(value: string) {
-	return value.trim().toLowerCase() === RandomColorLiteral;
+	const normalized = value.trim().toLowerCase();
+	return normalized === RandomColorLiteral || normalized === "random-color";
 }
 
 function createRandomColorHct() {

@@ -3,7 +3,7 @@
 ![npm version](https://img.shields.io/npm/v/@sandlada/material-theme-cli?label=NPM%20Version&labelColor=%2300531f&color=%23a3f5aa)
 ![GitHub License](https://img.shields.io/github/license/sandlada/material-theme-cli?label=License&labelColor=%2300531f&color=%23a3f5aa)
 
-A CLI based on the Material Design dynamic color system. Given a source color, it generates theme data and palette tokens that can be used directly in front-end projects, design tokens, script integrations, and bulk exports.
+A CLI based on the Material Design dynamic color system. Given a source color, it generates theme data and palette tokens and prints them to the terminal.
 
 Runtime requirements: Node.js 22+ and ESM.
 
@@ -28,92 +28,61 @@ npm start -- "#0f774a"
 
 ## Quick Start
 
-1. Pass a color directly to the CLI. By default, it prints CSS theme and palette tokens to the terminal:
+The CLI has two main commands: `g c` (generate colors) and `g p` (generate palettes).
+
+### Generate Colors
 
 ```bash
-material-theme-cli "#0f774a"
+material-theme-cli g c "#0f774a"
 ```
 
-If you want a random theme, you can also use `random-color`:
+This prints CSS custom properties for all 59 Material Design color tokens to the terminal.
+
+### Generate Palettes (themed)
+
+Generate all 6 Material palette families from a source color:
 
 ```bash
-material-theme-cli random-color
+material-theme-cli g p "#0f774a"
 ```
 
-2. If you want to write the output to a file, switch to file output and specify a path:
+### Generate a Custom Palette
+
+Create a single custom palette with your own prefix:
 
 ```bash
-material-theme-cli "#0f774a" --format css --output file --path ./theme.css
-```
-
-3. If the color is already stored in a text file, use `--input` to read it:
-
-```text
-# color.txt
-#0f774a
-```
-
-```bash
-material-theme-cli --input ./color.txt --format json --output file --path ./theme.json
+material-theme-cli g p my-brand "#0f774a"
 ```
 
 ## Usage Guide
 
-The recommended flow is simple: choose the input color, then the output format, then decide whether you want a preview or a file.
+### `g c` — Generate Colors
 
-1. Choose the input method.
-
-You can pass `[color]` directly, or use `--input <file-path>` to read from a file. If both are provided, `--input` takes precedence.
-
-2. Choose the output method.
-
-The default is terminal output. To generate a file, use `--output file` and set the destination with `--path`. If `--path` is omitted, the CLI writes to `./output.<format>` in the current working directory.
-
-3. Choose the format and theme parameters.
-
-If you just want a quick preview, keep the defaults. If you are integrating with a design system or multi-platform theme, adjust `--variant`, `--contrast-level`, `--spec-version`, and `--platform`, override palettes with `--primary`, `--secondary`, and similar options, or control palette output with `--no-palette`, `--palette-tones`, and token selectors such as `palette-primary-50`.
-
-4. Use a whitelist or blacklist when you need to filter tokens.
-
-`--token` is a whitelist, and `--exclude` is a blacklist. The CLI normalizes names to kebab-case before matching, and the two options are mutually exclusive.
-
-## Command Usage
-
-```bash
-material-theme-cli [color] \
-  [--input <file-path>] \
-  [--format <css|json|xml|yaml|js|ts|csv>] \
-  [--output <console|file>] \
-  [--path <output-file-path>] \
-  [--make-js <output-js-file-path>] \
-  [--no-palette] \
-  [--palette-only] \
-  [--palette-tones <tone-list>] \
-  [--variant <0-8|MONOCHROME|NEUTRAL|TONAL_SPOT|TONALSPOT|VIBRANT|EXPRESSIVE|FIDELITY|CONTENT|RAINBOW|FRUIT_SALAD|FRUITSALAD>] \
-  [--contrast-level <-1|0|1>] \
-  [--spec-version <2021|2025>] \
-  [--platform <phone|watch>] \
-  [--primary <color>] \
-  [--secondary <color>] \
-  [--tertiary <color>] \
-  [--error <color>] \
-  [--neutral <color>] \
-  [--neutral-variant <color>] \
-  [--token <token-name...>] \
-  [--exclude <token-name...>] \
-  [--help]
+```
+material-theme-cli g c [color] [options...]
 ```
 
-Default behavior:
+Generates 59 Material Design color tokens (light + dark schemes). Each token emits a `light-dark()` value in CSS, or equivalent in other formats.
 
-- `--format css`
-- `--output console`
-- palette output enabled by default
-- `--palette-tones 0..100`
-- `--variant TONAL_SPOT`
-- `--contrast-level 0`
-- `--spec-version 2025`
-- `--platform phone`
+### `g p` — Generate Palettes
+
+Two modes depending on the number of arguments:
+
+**Themed palettes** (1 argument): Generates all 6 palette families — `primary`, `secondary`, `tertiary`, `error`, `neutral`, `neutral-variant`.
+
+```
+material-theme-cli g p [color] [options...]
+```
+
+**Custom palette** (2 arguments): Generates a single palette with a custom prefix.
+
+```
+material-theme-cli g p [prefix] [color] [options...]
+```
+
+### Backward compatibility: bare `[color]`
+
+Running the CLI without a subcommand (e.g. `material-theme-cli "#0f774a"`) is equivalent to `g c`. This is kept for backward compatibility.
 
 ## Color Input Formats
 
@@ -126,168 +95,160 @@ The CLI accepts the following color syntaxes:
 | RGBA     | `rgba(15, 119, 74, 1)`       | Only fully opaque alpha is accepted, meaning `1` or `100%`.                                                                                 |
 | LAB      | `lab(44.3, -15.2, 18.6)`     | Converted directly from LAB values.                                                                                                         |
 | HCT      | `hct(270, 75, 50)`           | Useful when you want to provide Material color model values directly.                                                                       |
+| XYZ      | `xyz(0.41, 0.21, 0.05)`      | CIE XYZ (D65 white point) with normalized values (typically 0-1).                                                                           |
 | ARGB fn  | `argb(0xff0f774a)`           | Accepts a single ARGB integer.                                                                                                              |
 | ARGB int | `0xff0f774a` or `4278851722` | Supports decimal and `0x`-prefixed integers.                                                                                                |
-| Random   | `random-color`               | Generates an opaque random color.                                                                                                           |
+| Random   | `random`                     | Generates an opaque random color. `random-color` is also accepted for backward compatibility.                                               |
 
 If the input is empty or unsupported, the CLI exits with an error.
 
-`random-color` can be used in the positional argument, in `--input` file contents, and in the palette override options `--primary`, `--secondary`, `--tertiary`, `--error`, `--neutral`, and `--neutral-variant`.
+`random` can be used in the positional argument and in the palette override options `--primary`, `--secondary`, `--tertiary`, `--error`, `--neutral`, and `--neutral-variant`.
 
 ## Command Options
 
-### Input and Output
+### Common Options (all commands)
 
-| Option                            | Default             | Description                                                                                                                                                                                                                                     |
-| --------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[color]`                         | none                | Positional argument for passing the color value directly.                                                                                                                                                                                       |
-| `--input <file-path>`             | none                | Reads the source color text from a file, trimming leading and trailing whitespace. The path is resolved relative to the current working directory.                                                                                              |
-| `--format <format>`               | `css`               | Output format. Supported values: `css`, `json`, `xml`, `yaml`, `js`, `ts`, and `csv`.                                                                                                                                                           |
-| `--output <target>`               | `console`           | `console` prints to the terminal; `file` writes to disk.                                                                                                                                                                                        |
-| `--path <output-file-path>`       | `./output.<format>` | Used when `--output file` is selected. The path is resolved relative to the current working directory.                                                                                                                                          |
-| `--make-js <output-js-file-path>` | none                | Generates a reusable ESM wrapper script. It captures the current CLI configuration and calls `dist/index.js` at runtime. If the input uses `random-color`, the generated script re-randomizes at runtime. This is different from `--format js`. |
-| `--help`                          | none                | Displays help information.                                                                                                                                                                                                                      |
+These options apply to `g c`, `g p` (both modes), and the bare `[color]` form.
 
-### Theme and Palette
+| Option                              | Default   | Description                                                                                                                                                                                                                                                                            |
+| ----------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format <format>`                 | `css`     | Output format. Supported values: `css`, `json`, `xml`, `yaml`, `js`, `ts`, and `csv`.                                                                                                                                                                                                  |
+| `--variant <variant>`               | `neutral` | Dynamic scheme variant. Accepts numeric `0`–`8` or named: `MONOCHROME`, `NEUTRAL`, `TONAL_SPOT` / `TONALSPOT`, `VIBRANT`, `EXPRESSIVE`, `FIDELITY`, `CONTENT`, `RAINBOW`, `FRUIT_SALAD` / `FRUITSALAD`. Case-insensitive, underscores optional.                                        |
+| `--contrast-level <contrast-level>` | `0`       | Contrast level. Only `-1`, `0`, and `1` are accepted.                                                                                                                                                                                                                                  |
+| `--spec-version <spec-version>`     | `2025`    | Design specification version. `2021`, `2025`, and `2026` are accepted. `2026` is mapped to the `2025` spec.                                                                                                                                                                            |
+| `--platform <platform>`             | `phone`   | Target platform. Only `phone` and `watch` are accepted.                                                                                                                                                                                                                                |
+| `--primary <color>`                 | none      | Overrides the primary palette.                                                                                                                                                                                                                                                         |
+| `--secondary <color>`               | none      | Overrides the secondary palette.                                                                                                                                                                                                                                                       |
+| `--tertiary <color>`                | none      | Overrides the tertiary palette.                                                                                                                                                                                                                                                        |
+| `--error <color>`                   | none      | Overrides the error palette.                                                                                                                                                                                                                                                           |
+| `--neutral <color>`                 | none      | Overrides the neutral palette.                                                                                                                                                                                                                                                         |
+| `--neutral-variant <color>`         | none      | Overrides the neutral-variant palette.                                                                                                                                                                                                                                                 |
+| `--var-prefix <prefix>`             | auto\*    | Custom prefix for CSS variable / JSON / XML key names. Default: `md-sys-color-` for colors, `md-sys-ref-` for palettes. When provided, replaces the default verbatim — no infix is injected. On `g p` (custom), this option is ignored; the prefix comes from the positional argument. |
+| `--help`                            | none      | Displays help information.                                                                                                                                                                                                                                                             |
 
-| Option                              | Default      | Description                                                                                                                                                                                                                                           |
-| ----------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--variant <variant>`               | `TONAL_SPOT` | Dynamic scheme variant. Available values include: `0` = `MONOCHROME`, `1` = `NEUTRAL`, `2` = `TONAL_SPOT` / `TONALSPOT`, `3` = `VIBRANT`, `4` = `EXPRESSIVE`, `5` = `FIDELITY`, `6` = `CONTENT`, `7` = `RAINBOW`, `8` = `FRUIT_SALAD` / `FRUITSALAD`. |
-| `--contrast-level <contrast-level>` | `1`          | Contrast level. Only `-1`, `0`, and `1` are accepted.                                                                                                                                                                                                 |
-| `--spec-version <spec-version>`     | `2025`       | Design specification version. Only `2021` and `2025` are accepted.                                                                                                                                                                                    |
-| `--platform <platform>`             | `phone`      | Target platform. Only `phone` and `watch` are accepted.                                                                                                                                                                                               |
-| `--primary <color>`                 | none         | Overrides the primary palette.                                                                                                                                                                                                                        |
-| `--secondary <color>`               | none         | Overrides the secondary palette.                                                                                                                                                                                                                      |
-| `--tertiary <color>`                | none         | Overrides the tertiary palette.                                                                                                                                                                                                                       |
-| `--error <color>`                   | none         | Overrides the error palette.                                                                                                                                                                                                                          |
-| `--neutral <color>`                 | none         | Overrides the neutral palette.                                                                                                                                                                                                                        |
-| `--neutral-variant <color>`         | none         | Overrides the neutral-variant palette.                                                                                                                                                                                                                |
-| `--no-palette`                      | enabled      | Disables palette token output. Theme tokens still render normally.                                                                                                                                                                                    |
-| `--palette-only`                    | off          | Emits palette tokens only and skips theme token output.                                                                                                                                                                                               |
-| `--palette-tones <tone-list>`       | `0..100`     | Limits palette output to the selected tones. Accepts comma- or space-separated integers from `0` to `100`, such as `0, 1`.                                                                                                                            |
+\* The actual default prefix depends on the command: `g c` defaults to `md-sys-color`, `g p` (themed) defaults to `md-sys-ref`. On `g p` (custom), the prefix is taken from the positional argument, and `--var-prefix` is ignored.
 
-These palette override options accept the same syntax as the source color: Hex, RGB, RGBA, LAB, HCT, ARGB function, and ARGB integer.
+These palette override options accept the same syntax as the source color: Hex, RGB, RGBA, LAB, HCT, XYZ, ARGB function, and ARGB integer.
 
-### Filtering
+### `g c` — Filtering Options
 
-| Option                      | Default | Description                                                   |
-| --------------------------- | ------- | ------------------------------------------------------------- |
-| `--token <token-name...>`   | none    | Whitelist. Keeps only these tokens. Supports multiple values. |
-| `--exclude <token-name...>` | none    | Blacklist. Removes these tokens. Supports multiple values.    |
+| Option                      | Default | Description                                                                              |
+| --------------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `--include <token-name...>` | none    | Whitelist. Keeps only the listed color tokens (e.g. `primary`, `on-primary`, `surface`). |
+| `--exclude <token-name...>` | none    | Blacklist. Removes the listed color tokens.                                              |
 
 Notes:
 
-- `--token` and `--exclude` are mutually exclusive.
-- Names are normalized to kebab-case before matching, so `primaryContainer`, `PRIMARY_CONTAINER`, and `primary-container` are treated as the same token.
-- Palette selectors use the `palette-` prefix. Use `palette-primary` or `palette-neutral-variant` to keep an entire family, or `palette-primary-50` to keep a single tone.
-- Palette selectors can be combined with `--palette-only` and `--palette-tones` to narrow output to specific palette tokens.
+- `--include` and `--exclude` are mutually exclusive.
+- Names are normalized to kebab-case before matching (`primaryContainer` → `primary-container`).
 - Unknown names are reported as warnings and ignored.
+
+### `g p` (themed) — Palette Filtering Options
+
+| Option                      | Default  | Description                                                                                                                                                                   |
+| --------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--include <token-name...>` | none     | Keep only these palette families or specific tones (e.g. `primary`, `secondary-50`).                                                                                          |
+| `--exclude <token-name...>` | none     | Remove these palette families or specific tones. Mutually exclusive with `--include`.                                                                                         |
+| `--tones <tone-list>`       | `0..100` | Comma- or space-separated integer tones from `0` to `100` (e.g. `0, 10, 50, 100`). Limits all 6 families to these tones. `--palette-tones` is accepted as a deprecated alias. |
+
+### `g p` (custom) — Palette Filtering Options
+
+| Option                      | Default  | Description                                                                                                                                        |
+| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--include <token-name...>` | none     | Keep only these tones from the custom palette (e.g. `my-prefix-10`, `my-prefix-50`, or plain `10`, `50`).                                          |
+| `--exclude <token-name...>` | none     | Remove these tones from the custom palette. Mutually exclusive with `--include`.                                                                   |
+| `--tones <tone-list>`       | `0..100` | Comma- or space-separated integer tones from `0` to `100`. Controls the default set of tones. `--palette-tones` is accepted as a deprecated alias. |
+
+For custom palettes, `--include` and `--exclude` extract the numeric tone from the token name. Plain numbers like `10` are also accepted. `--include` overrides `--tones` when both are provided.
 
 ## Examples
 
-### 1. Terminal preview with the default CSS output
+### Generate Colors (`g c`)
 
 ```bash
+# Default CSS output
+material-theme-cli g c "#0f774a"
+
+# JSON output
+material-theme-cli g c "#0f774a" --format json
+
+# Only show primary and error tokens
+material-theme-cli g c "#0f774a" --include primary error
+
+# Exclude surface tokens
+material-theme-cli g c "#0f774a" --exclude surface surface-dim surface-bright
+
+# Custom variant and contrast
+material-theme-cli g c "#0f774a" --variant FRUIT_SALAD --contrast-level 1
+
+# Custom CSS variable prefix
+material-theme-cli g c "#0f774a" --var-prefix my-app
+
+# Override individual palette sources
+material-theme-cli g c "#0f774a" --primary "#1d4ed8" --secondary "#14b8a6"
+```
+
+### Generate Themed Palettes (`g p [color]`)
+
+```bash
+# Default: all 6 families × 101 tones = 606 tokens (CSS)
+material-theme-cli g p "#0f774a"
+
+# JSON output with selected tones
+material-theme-cli g p "#0f774a" --format json --tones "0, 10, 50, 100"
+
+# Limit to specific families
+material-theme-cli g p "#0f774a" --include primary secondary
+
+# Exclude neutral families
+material-theme-cli g p "#0f774a" --exclude neutral neutral-variant
+
+# Custom prefix
+material-theme-cli g p "#0f774a" --var-prefix my-theme
+```
+
+### Generate Custom Palette (`g p [prefix] [color]`)
+
+```bash
+# Single custom palette, all 101 tones
+material-theme-cli g p my-brand "#0f774a"
+
+# With specific tones
+material-theme-cli g p my-brand "#0f774a" --tones "0, 50, 100"
+
+# Include only specific tones
+material-theme-cli g p my-brand "#0f774a" --include "10" --include "50"
+
+# Exclude specific tones
+material-theme-cli g p my-brand "#0f774a" --exclude my-brand-0 --exclude my-brand-100
+```
+
+### Backward Compatibility (bare `[color]`)
+
+```bash
+# Equivalent to `g c`
 material-theme-cli "#0f774a"
+material-theme-cli random
+material-theme-cli "#0f774a" --format json --include primary
 ```
 
-### 2. Write CSS to a file
+## Output Protocol
+
+The CLI sends all output to stdout (the terminal). To save to a file, use shell redirection:
 
 ```bash
-material-theme-cli "#0f774a" --format css --output file --path ./theme.css
+material-theme-cli g c "#0f774a" --format json > theme.json
 ```
 
-### 3. Write JSON to a file
+### Format Details
 
-```bash
-material-theme-cli "#0f774a" --format json --output file --path ./theme.json
-```
+- **CSS**: emits `:root { ... }` with `--{prefix}-*` custom properties using `light-dark(light, dark)` values. Default prefix: `--md-sys-color-` for color tokens, `--md-sys-ref-` for palette tokens. Custom `--var-prefix` replaces the default verbatim (no infix injection).
+- **JSON** / **YAML**: color output has top-level `light`, `dark`, `scheme` objects. Palette output has a top-level `palette` object.
+- **XML**: emits `<?xml?>` with `<resources>` containing `<color>` entries. Color names use `_light` / `_dark` suffixes.
+- **JS** / **TS**: emits ESM `export const` declarations with `PascalCase` + `Light`/`Dark`/`Scheme` suffixes.
+- **CSV**: header `scheme,token-name,color-value` with rows for each light/dark/scheme combination (colors) or each palette tone (palettes).
 
-### 4. Read a color from a file
-
-```bash
-material-theme-cli --input ./color.txt --format yaml --output file --path ./theme.yaml
-```
-
-### 5. Generate a TypeScript module
-
-`js` and `ts` produce the same serialized content, both generating module source like `export const MdSysColor = { ... }`.
-
-```bash
-material-theme-cli "#0f774a" --format ts --output file --path ./theme.ts
-```
-
-### 6. Use a token whitelist
-
-```bash
-material-theme-cli "#0f774a" --token primary surface-tint on-primary
-```
-
-### 7. Use a token blacklist
-
-```bash
-material-theme-cli "#0f774a" --exclude surface-tint outline shadow
-```
-
-### 8. Override palettes
-
-```bash
-material-theme-cli "#0f774a" --primary "#1d4ed8" --secondary "#14b8a6" --neutral "#111827"
-```
-
-### 9. Adjust variant, contrast, and platform
-
-```bash
-material-theme-cli "#0f774a" --variant FRUIT_SALAD --contrast-level 0 --spec-version 2025 --platform watch
-```
-
-### 10. Generate a reusable script
-
-```bash
-material-theme-cli "#0f774a" --make-js ./scripts/theme-generator.js --format css --output file --path ./theme.css
-```
-
-`--make-js` generates a runtime script that captures the current parameters. The script depends on the built artifact `dist/index.js`, so run it only after the repository has been built.
-
-### 11. Skip palette output
-
-```bash
-material-theme-cli "#0f774a" --no-palette
-```
-
-### 12. Limit palette tones
-
-```bash
-material-theme-cli "#0f774a" --palette-tones "0, 1"
-```
-
-### 13. Keep a single palette tone
-
-```bash
-material-theme-cli "#0f774a" --palette-only --token palette-primary-50
-```
-
-## Protocol
-
-### Output Protocol
-
-The CLI first generates a pair of `lightObject` and `darkObject` values, then serializes them into the chosen format. To keep output stable, keys are normalized to kebab-case and sorted alphabetically.
-
-- `css`: emits `:root` and `--md-sys-color-*` custom properties using `light-dark(light, dark)` values.
-- `json` / `yaml`: emits a theme object with top-level `light`, `dark`, and `scheme` nodes.
-- `xml`: emits a `resources` node, with color names using `md_sys_color_*_light` and `md_sys_color_*_dark`.
-- `js` / `ts`: emits module source like `export const MdSysColor = { ... }`, where `Light`, `Dark`, and `Scheme` suffixes represent the light, dark, and combined values.
-- `csv`: uses the fixed header `scheme,token-name,color-value`, and expands each token into three rows for `light`, `dark`, and `scheme`.
-
-Palette output is included by default.
-
-- `css`: adds `--md-sys-palette-*` custom properties with fixed hex values and no `light-dark()` wrapper.
-- `json` / `yaml`: adds a top-level `palette` node with `md-sys-palette-*` keys.
-- `xml`: adds `md_sys_palette_*` color entries under `resources`.
-- `js` / `ts`: adds an `export const MdSysPalette = { ... }` object with fixed palette token values.
-- `csv`: adds `palette` rows for each palette token tone.
-
-If the normalized keys in `light` and `dark` do not match, serialization fails. This prevents incomplete theme files from being generated.
+Keys are normalized to kebab-case (CSS, JSON), snake_case (XML), or PascalCase (JS/TS) and sorted alphabetically for deterministic output.
 
 ### License
 

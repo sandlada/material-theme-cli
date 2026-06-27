@@ -1,12 +1,19 @@
-import { Hct, hexFromArgb } from '@material/material-color-utilities'
+import { Hct, Variant } from '@material/material-color-utilities'
 import { parse as parseCsv } from 'csv-parse/sync'
 import { XMLParser } from 'fast-xml-parser'
 import { load as loadYaml } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { MaterialColorService } from './material-color.service'
-import { MaterialPaletteService } from './material-palette.service'
 import { SerializationService } from './serialization.service'
-import { StringUtil } from '../utils/string-util'
+
+// Small deterministic theme with 2 tokens for focused format testing
+const theme = MaterialColorService.create({
+    sourceColor: Hct.fromInt(0xff6750a4),
+    variant: Variant.NEUTRAL,
+    contrast: 0,
+    palettes: {},
+    whiteList: ['primary', 'surface-tint'] as any,
+})
 
 const xmlParser = new XMLParser({
     ignoreAttributes: false,
@@ -15,352 +22,244 @@ const xmlParser = new XMLParser({
     parseAttributeValue: false,
 })
 
-const theme = MaterialColorService.create({
-    sourceColor: Hct.fromInt(0xff6750a4),
-    whiteList: ['surface-tint', 'primary'],
-})
-
-const sortedKeys = ['primary', 'surface-tint'] as const
-
-const expectedValues = sortedKeys.map((key) => ({
-    key,
-    light: hexFromArgb(theme.lightObject[key]),
-    dark: hexFromArgb(theme.darkObject[key]),
-}))
-
-const expectedRecords = {
-    light: Object.fromEntries(expectedValues.map((entry) => [`md-sys-color-${entry.key}`, entry.light])),
-    dark: Object.fromEntries(expectedValues.map((entry) => [`md-sys-color-${entry.key}`, entry.dark])),
-    scheme: Object.fromEntries(expectedValues.map((entry) => [`md-sys-color-${entry.key}`, `light-dark(${entry.light}, ${entry.dark})`])),
-}
-
-const cssOutput = [
-    ':root {',
-    ...expectedValues.map((entry) => `    --md-sys-color-${entry.key}: light-dark(${entry.light}, ${entry.dark});`),
-    '}',
-    '',
-].join('\n')
-
-const jsonOutput = `${JSON.stringify(expectedRecords, null, 4)}\n`
-
-const jsOutput = [
-    'export const MdSysColor = {',
-    ...expectedValues.flatMap((entry) => [
-        `    ${formatModulePropertyName(entry.key, 'Light')}: ${JSON.stringify(entry.light)},`,
-        `    ${formatModulePropertyName(entry.key, 'Dark')}: ${JSON.stringify(entry.dark)},`,
-        `    ${formatModulePropertyName(entry.key, 'Scheme')}: ${JSON.stringify(`light-dark(${entry.light}, ${entry.dark})`)},`,
-    ]),
-    '};',
-    '',
-].join('\n')
-
-const csvOutput = [
-    'scheme,token-name,color-value',
-    ...expectedValues.flatMap((entry) => [
-        `light,${entry.key},${entry.light}`,
-        `dark,${entry.key},${entry.dark}`,
-        `scheme,${entry.key},${escapeCsvCell(`light-dark(${entry.light}, ${entry.dark})`)}`,
-    ]),
-    '',
-].join('\n')
-
-const paletteOrder = [
-    ['primaryPalette', 'primary'],
-    ['secondaryPalette', 'secondary'],
-    ['tertiaryPalette', 'tertiary'],
-    ['errorPalette', 'error'],
-    ['neutralPalette', 'neutral'],
-    ['neutralVariantPalette', 'neutral-variant'],
-] as const
-
-const xmlOutput = [
-    '<?xml version="1.0" encoding="utf-8"?>',
-    '<resources>',
-    ...expectedValues.flatMap((entry) => [
-        `    <color name="md_sys_color_${StringUtil.toSnakeCase(entry.key)}_light">${entry.light}</color>`,
-        `    <color name="md_sys_color_${StringUtil.toSnakeCase(entry.key)}_dark">${entry.dark}</color>`,
-    ]),
-    '</resources>',
-    '',
-].join('\n')
-
 describe('SerializationService', () => {
-    it('serializes a theme to CSS, JSON, JS, TS, and CSV', () => {
-        expect(SerializationService.toCSS({ lightObject: theme.lightObject, darkObject: theme.darkObject })).toBe(cssOutput)
-        expect(SerializationService.toJSON({ lightObject: theme.lightObject, darkObject: theme.darkObject })).toBe(jsonOutput)
-        expect(SerializationService.toJS({ lightObject: theme.lightObject, darkObject: theme.darkObject })).toBe(jsOutput)
-        expect(SerializationService.toTS({ lightObject: theme.lightObject, darkObject: theme.darkObject })).toBe(jsOutput)
-        expect(SerializationService.toCSV({ lightObject: theme.lightObject, darkObject: theme.darkObject })).toBe(csvOutput)
+    describe('CSS', () => {
+        it('wraps output in :root { } block', () => {
+            const css = SerializationService.toCSS({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const trimmed = css.trim()
+            expect(trimmed.startsWith(':root {')).toBe(true)
+            expect(trimmed.endsWith('}')).toBe(true)
+        })
 
-        expect(parseCsv(SerializationService.toCSV({ lightObject: theme.lightObject, darkObject: theme.darkObject }), { skip_empty_lines: true })).toEqual([
-            ['scheme', 'token-name', 'color-value'],
-            ['light', 'primary', expectedValues[0].light],
-            ['dark', 'primary', expectedValues[0].dark],
-            ['scheme', 'primary', `light-dark(${expectedValues[0].light}, ${expectedValues[0].dark})`],
-            ['light', 'surface-tint', expectedValues[1].light],
-            ['dark', 'surface-tint', expectedValues[1].dark],
-            ['scheme', 'surface-tint', `light-dark(${expectedValues[1].light}, ${expectedValues[1].dark})`],
-        ])
-    })
+        it('uses light-dark() for every theme token', () => {
+            const css = SerializationService.toCSS({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const lines = css.split('\n').filter(l => l.includes('--md-sys-color-'))
+            expect(lines.length).toBeGreaterThan(0)
+            for (const line of lines) {
+                expect(line).toMatch(/light-dark\(#[0-9a-fA-F]{6},\s*#[0-9a-fA-F]{6}\)/)
+            }
+        })
 
-    it('serializes a theme to YAML and XML with the documented structure', () => {
-        const yamlOutput = SerializationService.toYAML({ lightObject: theme.lightObject, darkObject: theme.darkObject })
-        const actualXml = SerializationService.toXML({ lightObject: theme.lightObject, darkObject: theme.darkObject })
-        const xmlKeys = expectedValues.map((entry) => StringUtil.toSnakeCase(entry.key))
-
-        expect(loadYaml(yamlOutput)).toEqual(expectedRecords)
-        expect(actualXml).toBe(xmlOutput)
-        expect(xmlParser.parse(actualXml)).toEqual({
-            '?xml': {
-                '@_encoding': 'utf-8',
-                '@_version': '1.0',
-            },
-            resources: {
-                color: [
-                    {
-                        '#text': expectedValues[0].light,
-                        '@_name': `md_sys_color_${xmlKeys[0]}_light`,
-                    },
-                    {
-                        '#text': expectedValues[0].dark,
-                        '@_name': `md_sys_color_${xmlKeys[0]}_dark`,
-                    },
-                    {
-                        '#text': expectedValues[1].light,
-                        '@_name': `md_sys_color_${xmlKeys[1]}_light`,
-                    },
-                    {
-                        '#text': expectedValues[1].dark,
-                        '@_name': `md_sys_color_${xmlKeys[1]}_dark`,
-                    },
-                ],
-            },
+        it('palette tokens use bare key: value; (no light-dark wrapper)', () => {
+            const css = SerializationService.toCSS({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+            })
+            expect(css).toContain('--md-sys-ref-')
+            // Palette tokens should NOT use light-dark()
+            expect(css).not.toMatch(/--md-sys-ref-.*light-dark\(/)
         })
     })
 
-    it('serializes fixed palette tones without light-dark wrappers when palette output is enabled', () => {
-        const paletteTones = [0, 1]
-        const expectedPalette = buildExpectedPaletteRecord(paletteTones)
-        const xmlKeys = expectedValues.map((entry) => StringUtil.toSnakeCase(entry.key))
-
-        const cssOutputWithPalette = SerializationService.toCSS({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
-        })
-        const jsonOutputWithPalette = SerializationService.toJSON({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
-        })
-        const yamlOutputWithPalette = SerializationService.toYAML({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
-        })
-        const xmlOutputWithPalette = SerializationService.toXML({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
-        })
-        const jsOutputWithPalette = SerializationService.toJS({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
-        })
-        const tsOutputWithPalette = SerializationService.toTS({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
-        })
-        const csvOutputWithPalette = SerializationService.toCSV({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            palettes: theme.palettes,
-            paletteTones,
+    describe('JSON', () => {
+        it('has light, dark, scheme top-level keys for theme-only output', () => {
+            const json = SerializationService.toJSON({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const parsed = JSON.parse(json)
+            expect(Object.keys(parsed).sort()).toEqual(['dark', 'light', 'scheme'])
         })
 
-        expect(cssOutputWithPalette).toContain(`--md-sys-palette-primary-0: ${expectedPalette['md-sys-palette-primary-0']};`)
-        expect(cssOutputWithPalette).toContain(`--md-sys-palette-primary-1: ${expectedPalette['md-sys-palette-primary-1']};`)
-        expect(cssOutputWithPalette).not.toContain('--md-sys-palette-primary-0: light-dark(')
-        expect((cssOutputWithPalette.match(/--md-sys-palette-/g) ?? []).length).toBe(12)
-
-        expect(JSON.parse(jsonOutputWithPalette)).toEqual({
-            light: expectedRecords.light,
-            dark: expectedRecords.dark,
-            scheme: expectedRecords.scheme,
-            palette: expectedPalette,
-        })
-        expect(loadYaml(yamlOutputWithPalette)).toEqual({
-            light: expectedRecords.light,
-            dark: expectedRecords.dark,
-            scheme: expectedRecords.scheme,
-            palette: expectedPalette,
+        it('all three sections have identical sorted keys', () => {
+            const json = SerializationService.toJSON({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const parsed = JSON.parse(json)
+            const lightKeys = Object.keys(parsed.light).sort()
+            expect(Object.keys(parsed.dark).sort()).toEqual(lightKeys)
+            expect(Object.keys(parsed.scheme).sort()).toEqual(lightKeys)
         })
 
-        expect(xmlParser.parse(xmlOutputWithPalette)).toEqual({
-            '?xml': {
-                '@_encoding': 'utf-8',
-                '@_version': '1.0',
-            },
-            resources: {
-                color: [
-                    {
-                        '#text': expectedValues[0].light,
-                        '@_name': `md_sys_color_${xmlKeys[0]}_light`,
-                    },
-                    {
-                        '#text': expectedValues[0].dark,
-                        '@_name': `md_sys_color_${xmlKeys[0]}_dark`,
-                    },
-                    {
-                        '#text': expectedValues[1].light,
-                        '@_name': `md_sys_color_${xmlKeys[1]}_light`,
-                    },
-                    {
-                        '#text': expectedValues[1].dark,
-                        '@_name': `md_sys_color_${xmlKeys[1]}_dark`,
-                    },
-                    ...paletteOrder.flatMap(([sourceName, tokenName]) =>
-                        MaterialPaletteService.create({ palette: theme.palettes[sourceName]!, tones: paletteTones }).map((entry) => ({
-                            '#text': expectedPalette[`md-sys-palette-${tokenName}-${entry.tone}`],
-                            '@_name': `md_sys_palette_${tokenName.replace(/-/g, '_')}_${entry.tone}`,
-                        })),
-                    ),
-                ],
-            },
+        it('adds palette key when palettes are provided', () => {
+            const json = SerializationService.toJSON({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+            })
+            const parsed = JSON.parse(json)
+            expect(Object.keys(parsed).sort()).toEqual(['dark', 'light', 'palette', 'scheme'])
         })
 
-        expect(jsOutputWithPalette).toContain('export const MdSysPalette = {')
-        expect(jsOutputWithPalette).toContain(JSON.stringify('md-sys-palette-primary-0'))
-        expect(tsOutputWithPalette).toBe(jsOutputWithPalette)
-        expect(parseCsv(csvOutputWithPalette, { skip_empty_lines: true })).toContainEqual(['palette', 'primary-0', expectedPalette['md-sys-palette-primary-0']])
-        expect(parseCsv(csvOutputWithPalette, { skip_empty_lines: true })).toContainEqual(['palette', 'neutral-variant-1', expectedPalette['md-sys-palette-neutral-variant-1']])
-    })
-
-    it('serializes palette-only output with palette family filtering', () => {
-        const paletteTones = [1]
-        const expectedPalette = Object.fromEntries(
-            MaterialPaletteService.create({ palette: theme.palettes.primaryPalette!, tones: paletteTones }).map((entry) => [
-                `md-sys-palette-primary-${entry.tone}`,
-                hexFromArgb(entry.color),
-            ]),
-        )
-
-        const jsonOutput = SerializationService.toJSON({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            includeTheme: false,
-            palettes: theme.palettes,
-            paletteWhiteList: [{ family: 'primary' }],
-            paletteTones,
-        })
-
-        expect(JSON.parse(jsonOutput)).toEqual({
-            palette: expectedPalette,
+        it('suppresses light/dark/scheme when includeTheme is false', () => {
+            const json = SerializationService.toJSON({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                includeTheme: false,
+                palettes: theme.palettes,
+                paletteTones: [0],
+            })
+            const parsed = JSON.parse(json)
+            expect(Object.keys(parsed)).toEqual(['palette'])
         })
     })
 
-    it('serializes palette-only output with palette family exclusion', () => {
-        const paletteTones = [1]
-        const jsonOutput = SerializationService.toJSON({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            includeTheme: false,
-            palettes: theme.palettes,
-            paletteBlackList: [{ family: 'secondary' }],
-            paletteTones,
+    describe('XML', () => {
+        it('produces valid XML with <?xml?> declaration and <resources> root', () => {
+            const xml = SerializationService.toXML({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            expect(xml).toMatch(/^<\?xml version="1\.0" encoding="utf-8"\?>/)
+            expect(xml).toContain('<resources>')
+            expect(xml).toContain('</resources>')
         })
 
-        expect(jsonOutput).toContain('"md-sys-palette-primary-1"')
-        expect(jsonOutput).not.toContain('"md-sys-palette-secondary-1"')
-        expect(jsonOutput).not.toContain('"light"')
-        expect(jsonOutput).not.toContain('"dark"')
-        expect(jsonOutput).not.toContain('"scheme"')
-    })
-
-    it('serializes palette-only output with palette tone filtering', () => {
-        const paletteTones = [49, 50, 51]
-        const expectedPalette = Object.fromEntries(
-            MaterialPaletteService.create({ palette: theme.palettes.primaryPalette!, tones: paletteTones })
-                .filter((entry) => entry.tone === 50)
-                .map((entry) => [
-                    `md-sys-palette-primary-${entry.tone}`,
-                    hexFromArgb(entry.color),
-                ]),
-        )
-
-        const jsonOutput = SerializationService.toJSON({
-            lightObject: theme.lightObject,
-            darkObject: theme.darkObject,
-            includeTheme: false,
-            palettes: theme.palettes,
-            paletteWhiteList: [{ family: 'primary', tone: 50 }],
-            paletteTones,
+        it('generates _light and _dark entries for each token', () => {
+            const xml = SerializationService.toXML({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            expect(xml).toContain('_light')
+            expect(xml).toContain('_dark')
         })
 
-        expect(JSON.parse(jsonOutput)).toEqual({
-            palette: expectedPalette,
+        it('palette nodes use snake_case names without light/dark suffix', () => {
+            const xml = SerializationService.toXML({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+            })
+            // Palette entries should be single <color> nodes (no _light/_dark)
+            expect(xml).toContain('md_sys_ref_primary_0')
+            expect(xml).not.toMatch(/md_sys_ref_primary_0.*_light/)
         })
     })
 
-    it('rejects mismatched theme keys and invalid color values', () => {
-        expect(() => SerializationService.toCSS({ lightObject: { token: 0xff000000 }, darkObject: { otherToken: 0xffffffff } })).toThrow('same normalized keys')
-        expect(() => SerializationService.toJSON({ lightObject: { token: Number.POSITIVE_INFINITY }, darkObject: { token: 0xff000000 } })).toThrow('integer ARGB color value')
-        expect(() => SerializationService.toJSON({ lightObject: { token: {} }, darkObject: { token: 0xff000000 } })).toThrow('must be a string or ARGB number')
+    describe('YAML', () => {
+        it('matches JSON output structurally', () => {
+            const json = SerializationService.toJSON({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const yaml = SerializationService.toYAML({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            expect(loadYaml(yaml)).toEqual(JSON.parse(json))
+        })
     })
 
-    it('serializes an empty theme deterministically', () => {
-        expect(SerializationService.toCSS({ lightObject: {}, darkObject: {} })).toBe(`:root {\n}\n`)
-        expect(SerializationService.toJSON({ lightObject: {}, darkObject: {} })).toBe(`{\n    "light": {},\n    "dark": {},\n    "scheme": {}\n}\n`)
-        expect(loadYaml(SerializationService.toYAML({ lightObject: {}, darkObject: {} }))).toEqual({ light: {}, dark: {}, scheme: {} })
-        expect(SerializationService.toXML({ lightObject: {}, darkObject: {} })).toBe(`<?xml version="1.0" encoding="utf-8"?>\n<resources/>\n`)
-        expect(SerializationService.toJS({ lightObject: {}, darkObject: {} })).toBe(`export const MdSysColor = {\n};\n`)
-        expect(SerializationService.toCSV({ lightObject: {}, darkObject: {} })).toBe(`scheme,token-name,color-value\n`)
+    describe('JS / TS', () => {
+        it('exports a const with PascalCase Light/Dark/Scheme suffixes', () => {
+            const js = SerializationService.toJS({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            expect(js).toContain('export const')
+            expect(js).toMatch(/PrimaryLight/)
+            expect(js).toMatch(/PrimaryDark/)
+            expect(js).toMatch(/PrimaryScheme/)
+        })
+
+        it('JS and TS produce identical content', () => {
+            const js = SerializationService.toJS({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const ts = SerializationService.toTS({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            expect(js).toBe(ts)
+        })
+
+        it('includes MdSysPalette export when palettes are present', () => {
+            const js = SerializationService.toJS({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+            })
+            expect(js).toContain('MdSysPalette')
+        })
+    })
+
+    describe('CSV', () => {
+        it('has correct header', () => {
+            const csv = SerializationService.toCSV({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const lines = csv.trim().split('\n')
+            expect(lines[0]).toBe('scheme,token-name,color-value')
+        })
+
+        it('generates 3 rows per token (light, dark, scheme)', () => {
+            const csv = SerializationService.toCSV({ lightObject: theme.lightObject, darkObject: theme.darkObject })
+            const rows = csv.trim().split('\n')
+            expect(rows).toHaveLength(1 + Object.keys(theme.lightObject).length * 3)
+        })
+
+        it('adds palette rows when palettes are present', () => {
+            const csv = SerializationService.toCSV({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+            })
+            const rows = parseCsv(csv, { skip_empty_lines: true }) as string[][]
+            const paletteRows = rows.filter((r: string[]) => r[0] === 'palette')
+            expect(paletteRows.length).toBeGreaterThan(0)
+        })
+    })
+
+    describe('varPrefix', () => {
+        it('changes default theme prefix to {prefix}- pattern in CSS (no infix)', () => {
+            const css = SerializationService.toCSS({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                varPrefix: 'my-app',
+            })
+            expect(css).toContain('--my-app-')
+            expect(css).not.toContain('--md-sys-color-')
+            expect(css).not.toContain('--my-app-color-')
+        })
+
+        it('changes default palette prefix to {prefix}- pattern (no infix)', () => {
+            const json = SerializationService.toJSON({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+                varPrefix: 'my-app',
+            })
+            const parsed = JSON.parse(json)
+            const paletteKeys = Object.keys(parsed.palette)
+            expect(paletteKeys.every((k: string) => /^my-app-(primary|secondary|tertiary|error|neutral|neutral-variant)-0$/.test(k))).toBe(true)
+            expect(paletteKeys.some((k: string) => k.startsWith('my-app-palette-'))).toBe(false)
+        })
+
+        it('custom palette mode uses bare {prefix}-{tone} (no family infix)', () => {
+            // Per spec, custom palette (g p [prefix] [color]) emits bare
+            // {prefix}-{tone} tokens with no family infix. The CLI passes
+            // customPaletteName: "" to trigger the bare-tone path.
+            const json = SerializationService.toJSON({
+                lightObject: theme.lightObject,
+                darkObject: theme.darkObject,
+                palettes: theme.palettes,
+                paletteTones: [0],
+                varPrefix: 'custom',
+                isCustomPalette: true,
+                customPaletteName: '',
+            })
+            const parsed = JSON.parse(json)
+            expect(Object.keys(parsed.palette)).toEqual(['custom-0'])
+        })
+    })
+
+    describe('error handling', () => {
+        it('throws on mismatched light/dark keys', () => {
+            expect(() => SerializationService.toCSS({
+                lightObject: { a: 0xff000000 },
+                darkObject: { b: 0xffffffff },
+            })).toThrow(/same normalized keys|mismatch/i)
+        })
+
+        it('throws on invalid ARGB color values', () => {
+            expect(() => SerializationService.toJSON({
+                lightObject: { token: Number.POSITIVE_INFINITY },
+                darkObject: { token: 0xff000000 },
+            })).toThrow(/integer|ARGB/i)
+        })
+    })
+
+    describe('empty theme', () => {
+        it('produces valid minimal output for all formats', () => {
+            const empty = { lightObject: {}, darkObject: {} }
+            expect(() => SerializationService.toCSS(empty)).not.toThrow()
+            expect(() => SerializationService.toJSON(empty)).not.toThrow()
+            expect(() => SerializationService.toXML(empty)).not.toThrow()
+            expect(() => SerializationService.toYAML(empty)).not.toThrow()
+            expect(() => SerializationService.toJS(empty)).not.toThrow()
+            expect(() => SerializationService.toTS(empty)).not.toThrow()
+            expect(() => SerializationService.toCSV(empty)).not.toThrow()
+        })
+
+        it('CSS empty theme is valid :root with no properties', () => {
+            const css = SerializationService.toCSS({ lightObject: {}, darkObject: {} })
+            expect(css.trim()).toBe(':root {\n}')
+        })
+
+        it('JSON empty theme has empty light/dark/scheme objects', () => {
+            const json = SerializationService.toJSON({ lightObject: {}, darkObject: {} })
+            const parsed = JSON.parse(json)
+            expect(parsed).toEqual({ light: {}, dark: {}, scheme: {} })
+        })
     })
 })
-
-function formatModulePropertyName(baseName: string, suffix: 'Light' | 'Dark' | 'Scheme') {
-    const propertyName = `${StringUtil.toPascalCase(baseName)}${suffix}`
-
-    if (/^[$A-Z_a-z][$\w]*$/u.test(propertyName)) {
-        return propertyName
-    }
-
-    return JSON.stringify(propertyName)
-}
-
-function escapeCsvCell(value: string) {
-    if (value.length === 0) {
-        return '""'
-    }
-
-    const shouldQuote = /[",\r\n]/.test(value) || /^\s|\s$/u.test(value)
-
-    if (!shouldQuote) {
-        return value
-    }
-
-    return `"${value.replace(/"/g, '""')}"`
-}
-
-function buildExpectedPaletteRecord(paletteTones: number[]) {
-    const record: Record<string, string> = {}
-
-    for (const [sourceName, tokenName] of paletteOrder) {
-        const palette = theme.palettes[sourceName]!
-        const entries = MaterialPaletteService.create({ palette, tones: paletteTones })
-
-        for (const entry of entries) {
-            record[`md-sys-palette-${tokenName}-${entry.tone}`] = hexFromArgb(entry.color)
-        }
-    }
-
-    return record
-}

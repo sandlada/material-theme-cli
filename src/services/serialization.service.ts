@@ -55,28 +55,96 @@ type ThemeRecord = {
 const XmlDeclaration = '<?xml version="1.0" encoding="utf-8"?>\n';
 const ModuleColorExportName = "MdSysColor";
 const ModulePaletteExportName = "MdSysPalette";
-const CssPrefix = "--md-sys-color-";
-const CssPalettePrefix = "--md-sys-palette-";
-const JsonPrefix = "md-sys-color-";
-const JsonPalettePrefix = "md-sys-palette-";
-const XmlPrefix = "md_sys_color_";
-const XmlPalettePrefix = "md_sys_palette_";
+const DefaultCssPrefix = "--md-sys-color-";
+const DefaultCssPalettePrefix = "--md-sys-ref-";
+const DefaultJsonPrefix = "md-sys-color-";
+const DefaultJsonPalettePrefix = "md-sys-ref-";
+const DefaultXmlPrefix = "md_sys_color_";
+const DefaultXmlPalettePrefix = "md_sys_ref_";
+
+type PrefixConfig = {
+    theme: {
+        css: string;
+        json: string;
+        xml: string;
+    };
+    palette: {
+        css: string;
+        json: string;
+        xml: string;
+    };
+};
+
+function resolvePrefixConfig(varPrefix?: string, isCustomPalette?: boolean): PrefixConfig {
+    if (varPrefix === undefined || varPrefix.length === 0) {
+        return {
+            theme: {
+                css: DefaultCssPrefix,
+                json: DefaultJsonPrefix,
+                xml: DefaultXmlPrefix,
+            },
+            palette: {
+                css: DefaultCssPalettePrefix,
+                json: DefaultJsonPalettePrefix,
+                xml: DefaultXmlPalettePrefix,
+            },
+        };
+    }
+
+    const normalized = varPrefix.replace(/^-+/u, "").replace(/-+$/u, "");
+    const prefix = normalized.length > 0 ? `${normalized}-` : "";
+    const cssDashPrefix = `--${prefix}`;
+
+    if (isCustomPalette) {
+		// Custom palette (g p [prefix] [color]): bare {prefix}-{tone}, no family infix.
+		// Theme tokens are not emitted in this mode, but keep a sensible fallback.
+		return {
+			theme: {
+				css: `${cssDashPrefix}color-`,
+				json: `${prefix}color-`,
+				xml: `${prefix}color-`.replace(/-/gu, "_"),
+			},
+			palette: {
+				css: cssDashPrefix,
+				json: prefix,
+				xml: prefix.replace(/-/gu, "_"),
+			},
+		};
+	}
+
+	// --var-prefix replaces the default prefix verbatim (no infix injection).
+	// Per the design spec body:
+	//   g c --var-prefix my-prefix  -> --my-prefix-{token}
+	//   g p --var-prefix my-prefix  -> --my-prefix-{family}-{tone}
+	return {
+		theme: {
+			css: cssDashPrefix,
+			json: prefix,
+			xml: prefix.replace(/-/gu, "_"),
+		},
+		palette: {
+			css: cssDashPrefix,
+			json: prefix,
+			xml: prefix.replace(/-/gu, "_"),
+		},
+	};
+}
 
 const ThemePaletteOrder: ThemePaletteName[] = [
-    "primaryPalette",
-    "secondaryPalette",
-    "tertiaryPalette",
-    "errorPalette",
-    "neutralPalette",
-    "neutralVariantPalette",
+	"primaryPalette",
+	"secondaryPalette",
+	"tertiaryPalette",
+	"errorPalette",
+	"neutralPalette",
+	"neutralVariantPalette",
 ];
 
 const xmlBuilder = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: "@_",
-    format: true,
-    indentBy: "    ",
-    suppressEmptyNode: true,
+	ignoreAttributes: false,
+	attributeNamePrefix: "@_",
+	format: true,
+	indentBy: "    ",
+	suppressEmptyNode: true,
 });
 
 export class SerializationService {
@@ -91,10 +159,14 @@ export class SerializationService {
         paletteWhiteList?: PaletteSelector[];
         paletteBlackList?: PaletteSelector[];
         paletteTones?: number[];
+        varPrefix?: string;
+        customPaletteName?: string;
+        isCustomPalette?: boolean;
     }) {
         const includeTheme = args.includeTheme !== false;
-        const themeEntries = this.normalizeThemeEntries(args.lightObject, args.darkObject);
-        const paletteEntries = this.normalizePaletteEntries(args.palettes, args.paletteTones, args.paletteWhiteList, args.paletteBlackList);
+        const prefix = resolvePrefixConfig(args.varPrefix, args.isCustomPalette);
+        const themeEntries = this.normalizeThemeEntries(args.lightObject, args.darkObject, prefix);
+        const paletteEntries = this.normalizePaletteEntries(args.palettes, args.paletteTones, args.paletteWhiteList, args.paletteBlackList, prefix, args.customPaletteName);
 
         if (args.format === "css") {
             return this.toCss(themeEntries, paletteEntries, includeTheme);
@@ -127,35 +199,35 @@ export class SerializationService {
         throw new TypeError(`SerializationService.serialize: unsupported format "${args.format}".`);
     }
 
-    public static toCSS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "css" });
+    public static toCSS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "css" });
     }
 
-    public static toJSON(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "json" });
+    public static toJSON(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "json" });
     }
 
-    public static toXML(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "xml" });
+    public static toXML(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "xml" });
     }
 
-    public static toYAML(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "yaml" });
+    public static toYAML(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "yaml" });
     }
 
-    public static toJS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "js" });
+    public static toJS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "js" });
     }
 
-    public static toTS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "ts" });
+    public static toTS(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "ts" });
     }
 
-    public static toCSV(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[] }) {
-        return this.serialize({ lightObject: args.lightObject, darkObject: args.darkObject, includeTheme: args.includeTheme, palettes: args.palettes, paletteWhiteList: args.paletteWhiteList, paletteBlackList: args.paletteBlackList, paletteTones: args.paletteTones, format: "csv" });
+    public static toCSV(args: { lightObject: ThemeObject; darkObject: ThemeObject; includeTheme?: boolean; palettes?: ThemePalettes; paletteWhiteList?: PaletteSelector[]; paletteBlackList?: PaletteSelector[]; paletteTones?: number[]; varPrefix?: string; customPaletteName?: string; isCustomPalette?: boolean }) {
+        return this.serialize({ ...args, format: "csv" });
     }
 
-    private static normalizeThemeEntries(lightObject: ThemeObject, darkObject: ThemeObject): ThemeEntry[] {
+    private static normalizeThemeEntries(lightObject: ThemeObject, darkObject: ThemeObject, prefix: PrefixConfig): ThemeEntry[] {
         const lightEntries = this.normalizeThemeObject(lightObject, "lightObject");
         const darkEntries = this.normalizeThemeObject(darkObject, "darkObject");
 
@@ -180,10 +252,10 @@ export class SerializationService {
 
             return {
                 normalizedKey,
-                jsonKey: `${JsonPrefix}${normalizedKey}`,
-                cssKey: `${CssPrefix}${normalizedKey}`,
-                xmlLightKey: `${XmlPrefix}${StringUtil.toSnakeCase(normalizedKey)}_light`,
-                xmlDarkKey: `${XmlPrefix}${StringUtil.toSnakeCase(normalizedKey)}_dark`,
+                jsonKey: `${prefix.theme.json}${normalizedKey}`,
+                cssKey: `${prefix.theme.css}${normalizedKey}`,
+                xmlLightKey: `${prefix.theme.xml}${StringUtil.toSnakeCase(normalizedKey)}_light`,
+                xmlDarkKey: `${prefix.theme.xml}${StringUtil.toSnakeCase(normalizedKey)}_dark`,
                 moduleBaseName,
                 lightValue,
                 darkValue,
@@ -192,7 +264,7 @@ export class SerializationService {
         });
     }
 
-    private static normalizePaletteEntries(palettes?: ThemePalettes, paletteTones?: number[], paletteWhiteList?: PaletteSelector[], paletteBlackList?: PaletteSelector[]) {
+    private static normalizePaletteEntries(palettes?: ThemePalettes, paletteTones?: number[], paletteWhiteList?: PaletteSelector[], paletteBlackList?: PaletteSelector[], prefix?: PrefixConfig, customPaletteName?: string) {
         if (palettes === undefined) {
             return [];
         }
@@ -201,6 +273,7 @@ export class SerializationService {
         const whiteList = this.normalizePaletteSelectors(paletteWhiteList);
         const blackList = this.normalizePaletteSelectors(paletteBlackList);
         const paletteEntries: PaletteEntry[] = [];
+        const palPrefix = prefix ?? resolvePrefixConfig();
 
         for (const paletteName of ThemePaletteOrder) {
             const palette = palettes[paletteName];
@@ -212,22 +285,24 @@ export class SerializationService {
             const normalizedPaletteName = this.toPaletteTokenName(paletteName);
 
             for (const toneEntry of MaterialPaletteService.create({ palette, tones })) {
-                if (whiteList !== undefined && !whiteList.some((selector) => this.matchesPaletteSelector(selector, normalizedPaletteName, toneEntry.tone))) {
+                if (whiteList !== undefined && customPaletteName === undefined && !whiteList.some((selector) => this.matchesPaletteSelector(selector, normalizedPaletteName, toneEntry.tone))) {
                     continue;
                 }
 
-                if (blackList !== undefined && blackList.some((selector) => this.matchesPaletteSelector(selector, normalizedPaletteName, toneEntry.tone))) {
+                if (blackList !== undefined && customPaletteName === undefined && blackList.some((selector) => this.matchesPaletteSelector(selector, normalizedPaletteName, toneEntry.tone))) {
                     continue;
                 }
 
-                const normalizedKey = `${normalizedPaletteName}-${toneEntry.tone}`;
+                const normalizedKey = customPaletteName !== undefined
+                    ? `${String(toneEntry.tone)}`
+                    : `${normalizedPaletteName}-${toneEntry.tone}`;
                 const value = hexFromArgb(toneEntry.color);
 
                 paletteEntries.push({
                     normalizedKey,
-                    jsonKey: `${JsonPalettePrefix}${normalizedKey}`,
-                    cssKey: `${CssPalettePrefix}${normalizedKey}`,
-                    xmlKey: `${XmlPalettePrefix}${StringUtil.toSnakeCase(normalizedKey)}`,
+                    jsonKey: `${palPrefix.palette.json}${normalizedKey}`,
+                    cssKey: `${palPrefix.palette.css}${normalizedKey}`,
+                    xmlKey: `${palPrefix.palette.xml}${StringUtil.toSnakeCase(normalizedKey)}`,
                     value,
                 });
             }
